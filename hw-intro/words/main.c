@@ -51,8 +51,8 @@ int num_words(FILE* infile) {
 
   int length = 0;
   while ((c = fgetc(infile)) != EOF) {
-    if(!isalpha(c)){
-      if(length > 1){
+    if (!isalpha(c)) {
+      if (length > 1) {
         num_words++;
       }
       length = 0;
@@ -61,7 +61,7 @@ int num_words(FILE* infile) {
     }
   }
 
-  if(length > 1){
+  if (length > 1) {
     num_words++;
   }
 
@@ -79,7 +79,43 @@ int num_words(FILE* infile) {
  * 1 in the event of any errors (e.g. wclist or infile is NULL)
  * and 0 otherwise.
  */
-int count_words(WordCount** wclist, FILE* infile) { return 0; }
+int count_words(WordCount** wclist, FILE* infile) {
+  if (wclist == NULL || infile == NULL) {
+    return 1;
+  }
+
+  char word_buffer[(MAX_WORD_LEN + 1)] = {0};
+  int length = 0;
+  int c;
+
+  while ((c = fgetc(infile)) != EOF) {
+    if (!isalpha(c)) {
+      if (length > 1) {
+        word_buffer[length] = '\0';
+        if (add_word(wclist, word_buffer)) {
+          return 1;
+        }
+      }
+      length = 0;
+    } else {
+      if (length >= MAX_WORD_LEN) {
+        return 1;
+      }
+
+      word_buffer[length] = tolower(c);
+      length++;
+    }
+  }
+
+  if (length > 1 && length <= MAX_WORD_LEN) {
+    word_buffer[length] = '\0';
+    if (add_word(wclist, word_buffer)) {
+      return 1;
+    }
+  }
+
+  return 0;
+}
 
 /*
  * Comparator to sort list by frequency.
@@ -148,10 +184,16 @@ int main(int argc, char* argv[]) {
     infile = stdin;
     total_words += num_words(infile);
   } else {
-    for(int i = optind; i < argc; i++){
-      infile = fopen(argv[i], "r");
-      total_words += num_words(infile);
-      fclose(infile);
+    if (count_mode) {
+      for (int i = optind; i < argc; i++) {
+        infile = fopen(argv[i], "r");
+        total_words += num_words(infile);
+        fclose(infile);
+      }
+    }
+
+    if (freq_mode) {
+      infile = fopen(argv[optind], "r");
     }
     // At least one file specified. Useful functions: fopen(), fclose().
     // The first file can be found at argv[optind]. The last file can be
@@ -161,10 +203,16 @@ int main(int argc, char* argv[]) {
   if (count_mode) {
     printf("The total number of words is: %i\n", total_words);
   } else {
+    if (count_words(&word_counts, infile)) {
+      return 1;
+    }
+    printf("The frequencies of each word are: \n");
+    fprint_words(word_counts, stdout);
+
     wordcount_sort(&word_counts, wordcount_less);
 
     printf("The frequencies of each word are: \n");
-    fprint_words(word_counts, stdout);
+    fprint_words(word_counts->next, stdout);
   }
   return 0;
 }

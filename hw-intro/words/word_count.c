@@ -21,7 +21,6 @@ Mutators take a reference to a list as first arg.
 */
 
 #include "word_count.h"
-#include <cstdlib>
 #include <stdlib.h>
 #include <string.h>
 
@@ -99,6 +98,17 @@ int add_word(WordCount** wclist, char* word) {
     return 1;
   }
 
+  char* word_copy = strdup(word);
+  if (word_copy == NULL) {
+    return 1;
+  }
+
+  if ((*wclist)->word == NULL) {
+    (*wclist)->count = 1;
+    (*wclist)->word = word_copy;
+    return 0;
+  }
+
   WordCount* wc = find_word(*wclist, word);
   if (wc == NULL) {
     WordCount* newWordCount = malloc(sizeof(WordCount));
@@ -107,13 +117,7 @@ int add_word(WordCount** wclist, char* word) {
     }
 
     newWordCount->count = 1;
-
-    newWordCount->word = strdup(word);
-    if (newWordCount->word == NULL) {
-      free(newWordCount);
-      return 1;
-    }
-
+    newWordCount->word = word_copy;
     newWordCount->next = *wclist;
     *wclist = newWordCount;
   } else {
