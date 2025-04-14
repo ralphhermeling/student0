@@ -1,0 +1,10 @@
+4. What is the memory address argv in hex and what does it store?
+0x3ffffe24 its a pointer to a pointer to a character
+so argv is an array of strings
+11. info registers
+18. 0x3f5aa519
+21. mov $0x0 %eax
+    mov -0x4(%ebp),%ebx 
+    leave 
+    ret
+

@@ -1,0 +1,18 @@
+i386-gcc -m32 -S -o recurse.S recurse.c
+
+the .text section contains the program code and the .data contains the statically initialized data of the program 
+
+i386-objdump --syms object_file_name
+
+a set of characters and spaces indicating flag bits that are set on the symbol. g means global
+*UND* means section is referenced in the file being dumped but not defined there
+
+f means the symbol is the name of a file 
+O means the symbol is the name of an object
+
+.text contains recur
+SYMBOL TABLE contains stuff and foo
+
+no stack and heap are not part of the object file but instead are dynamic areas in memory
+
+the addresses of variables that are stack allocated are lower than old ones so the stack grows downwards from high memory addresses to low memory addresses
