@@ -20,6 +20,7 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <stdlib.h>
 #include <string.h>
 #ifndef PINTOS_LIST
 #error "PINTOS_LIST must be #define'd when compiling word_count_l.c"
@@ -53,7 +54,14 @@ word_count_t* find_word(word_count_list_t* wclist, char* word) {
 }
 
 word_count_t* add_word(word_count_list_t* wclist, char* word) {
-  word_count_t *wc = malloc(sizeof(word_count_t));
+  word_count_t *wc = find_word(wclist, word);
+  if(wc != NULL){
+    wc->count++;
+    free(word);
+    return wc;
+  }
+
+  wc = malloc(sizeof(word_count_t));
   if(!wc){
     return NULL;
   }

@@ -140,7 +140,7 @@ static void start_process(void* file_name_) {
     char** argv = (char**)user_esp;
 
     user_esp -= sizeof(char**);
-    *(char**)user_esp = argv;
+    *(char***)user_esp = argv;
 
     user_esp -= sizeof(int);
     *(int*)user_esp = argc;
@@ -148,7 +148,7 @@ static void start_process(void* file_name_) {
     user_esp -= sizeof(void*);
     *(void**)user_esp = 0;
 
-    if_.esp =(uintptr_t)user_esp;
+    if_.esp =(void*)user_esp;
   }
 
   /* Handle failure with succesful PCB malloc. Must free the PCB */
