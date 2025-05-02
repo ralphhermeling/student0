@@ -1,0 +1,47 @@
+1. What virtual address did the program try to access from userspace that caused it to crash? Why is the program not allowed to access this memory address at this point? (Be specific, mentioning specific macros from the Pintos codebase.)
+
+The virtual address the program tried to access is 0xc0000008.
+Virtual memory in Pintos is divided into two regions: user virtual memory and kernel virtual memory.
+User virtual memory ranges from virtual address 0 up to PHYS_BASE, which is defined in threads/vaddr.h and defaults to 0xc0000000 (3 GB).
+The user program tried to access 0xc0000008 which is inside the virtual memory region of the kernel.
+
+2. What is the virtual address of the instruction that resulted in the crash?
+The virtual address of the instruction is 0x8048915, because the test output says eip=0x8048915.
+
+3. To investigate, disassemble the do-nothing binary using i386-objdump (you used this tool in Homework 0). What is the name of the function the program was in when it crashed? Copy the disassembled code for that function onto Gradescope, and identify the instruction at which the program crashed.
+The name of the function was _start and the instruction at which the program crashed is 8048915:  8b 45 0c              mov    0xc(%ebp),%eax 
+
+4. Find the C code for the function you identified above (Hint: it was executed in userspace, so it’s either in do-nothing.c or one of the files in proj-pregame/src/lib or proj-pregame/src/lib/user), and copy it onto Gradescope.
+C code _start is in src/lib/user/entry.c
+
+5. For each instruction in the disassembled function in #3, try to justify to yourself in a few words why it’s necessary and/or what it’s trying to do. Hint: read about 80x86 calling convention. Why did the instruction you identified in #3 try to access memory at the virtual address you identified in #1? Please provide a high-level explanation, rather than simply mentioning register values.
+
+0804890f <_start>:
+ 804890f:	55                   	push   %ebp
+ 8048910:	89 e5                	mov    %esp,%ebp
+ 8048912:	83 ec 18             	sub    $0x18,%esp
+ 8048915:	8b 45 0c             	mov    0xc(%ebp),%eax
+ 8048918:	89 44 24 04          	mov    %eax,0x4(%esp)
+ Store argv argument at the right place on the stack for a function call to main.
+
+ 804891c:	8b 45 08             	mov    0x8(%ebp),%eax
+ Load the second item on the stack frame (offset 0x8), which is the first argument to main (int argc)
+
+ 804891f:	89 04 24             	mov    %eax,(%esp)
+ Store argc at the expected place on the stack for calling main.
+
+
+ 8048922:	e8 6d f7 ff ff       	call   8048094 <main>
+ Call the main function with the arguments prepared.
+
+
+ 8048927:	89 04 24             	mov    %eax,(%esp)
+ Move the return value of main into the right place on the stack to pass to exit.
+
+ 804892a:	e8 d4 22 00 00       	call   804ac03 <exit>
+ Call exit with the return value of main
+
+So it is storing the current base pointer onto the stack and setting the current stack pointer to be the base pointer. This is standard function prologue. 
+Then it is making room on the stack for the arguments of the function by decrementing the stack pointer with hex 0x18. This is setting up a new stack frame. 
+Then it moves what is at address ebp + 0xc to register %eax.
+Load the third item on the stack frame (offset 0xc) into eax. This is meant to retrieve the second argument to main, which is char **argv.

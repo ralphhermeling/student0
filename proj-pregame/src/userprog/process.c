@@ -102,6 +102,55 @@ static void start_process(void* file_name_) {
     success = load(file_name, &if_.eip, &if_.esp);
   }
 
+  if(success){
+    char* args[32];
+    int argc = 0;
+
+    // Tokenize file name
+    char* token, *save_ptr;
+    for(token = strtok_r(file_name, " ", &save_ptr); token != NULL; token = strtok_r(NULL, " ", &save_ptr)){
+      args[argc++]=token;
+    }
+
+    void* user_esp = (void*)if_.esp;
+    char* arg_ptrs[32];
+    int i;
+
+    // Push arguments onto stack in reverse
+    for(i = argc - 1; i>= 0; i--){
+      size_t len = strlen(args[i]) + 1;
+      user_esp -= len;
+      memcpy(user_esp, args[i], len);
+      arg_ptrs[i] = user_esp;
+    }
+
+    // Word-align
+    user_esp = (void*)((uintptr_t)user_esp & 0xfffffffc);    // Push NULL argv[0]
+
+    // Push null sentinel
+    user_esp -= sizeof(char*);
+    *(char**)user_esp = NULL;
+
+    // Push argv[i] pointers
+    for(int i = argc - 1; i>= 0; i--){
+      user_esp -= sizeof(char*);
+      *(char**)user_esp = arg_ptrs[i];
+    }
+
+    char** argv = (char**)user_esp;
+
+    user_esp -= sizeof(char**);
+    *(char**)user_esp = argv;
+
+    user_esp -= sizeof(int);
+    *(int*)user_esp = argc;
+
+    user_esp -= sizeof(void*);
+    *(void**)user_esp = 0;
+
+    if_.esp =(uintptr_t)user_esp;
+  }
+
   /* Handle failure with succesful PCB malloc. Must free the PCB */
   if (!success && pcb_success) {
     // Avoid race where PCB is freed before t->pcb is set to NULL
