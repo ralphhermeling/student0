@@ -47,7 +47,8 @@ typedef struct fun_desc {
 fun_desc_t cmd_table[] = {
     {cmd_help, "?", "show this help menu"},
     {cmd_exit, "exit", "exit the command shell"},
-    {cmd_pwd, "pwd", "print current working directory"}
+    {cmd_pwd, "pwd", "print current working directory"},
+    {cmd_cd, "cd", "change current working directory to given directory"},
 };
 
 /* Prints a helpful description for the given command */
@@ -70,6 +71,22 @@ int cmd_pwd(unused struct tokens* tokens){
     perror("getcwd() error");
     return 1;
   }
+  return 0;
+}
+
+/* Takes one argument, a directory path, and changes the current working directory to that directory */
+int cmd_cd(struct tokens* tokens){
+  char *directory = tokens_get_token(tokens, 1);
+  if(directory == NULL){
+    perror("missing directory argument");
+    return 1;
+  }
+
+  if(chdir(directory) != 0){
+    printf("chdir failed with errno %d: %s\n", errno, strerror(errno));
+    return 1;
+  }
+
   return 0;
 }
 
