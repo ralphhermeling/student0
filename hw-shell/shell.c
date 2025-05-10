@@ -126,11 +126,18 @@ void init_shell() {
 
 char* resolve_program_path(char* program_name) {
   // Look for program on PATH
-  char* path = getenv("PATH");
-  if (path == NULL) {
+  char* path_env = getenv("PATH");
+  if (path_env == NULL) {
     printf("execute_program: path environment variable not set\n");
     return NULL;
   }
+
+  char* path = strdup(path_env);
+  if (path == NULL) {
+    perror("strdup failed");
+    return NULL;
+  }
+
 
   char* rest;
   char* directory = strtok_r(path, ":", &rest);
@@ -158,6 +165,36 @@ char* resolve_program_path(char* program_name) {
   return NULL;
 }
 
+bool has_stdin_redirect(struct tokens* tokens, char** file_name_in) {
+  for (size_t i = 0; i < tokens_get_length(tokens); i++) {
+    char* token = tokens_get_token(tokens, i);
+    if (strcmp(token, "<") == 0) {
+      *file_name_in = tokens_get_token(tokens, i + 1);
+      if (*file_name_in == NULL) {
+        fprintf(stderr, "syntax error: expected file after '<'\n");
+        return false;
+      }
+      return true;
+    }
+  }
+  return false;
+}
+
+bool has_stdout_redirect(struct tokens* tokens, char** file_name_out) {
+  for (size_t i = 0; i < tokens_get_length(tokens); i++) {
+    char* token = tokens_get_token(tokens, i);
+    if (strcmp(token, ">") == 0) {
+      *file_name_out = tokens_get_token(tokens, i + 1);
+      if (*file_name_out == NULL) {
+        fprintf(stderr, "syntax error: expected file after '>'\n");
+        return false;
+      }
+      return true;
+    }
+  }
+  return false;
+}
+
 void execute_program(struct tokens* tokens) {
   char* program_argument = tokens_get_token(tokens, 0);
   if (program_argument == NULL) {
@@ -179,20 +216,55 @@ void execute_program(struct tokens* tokens) {
     }
   }
 
+  // Determine whether to redirect stdin
+  char* file_name_in = NULL;
+  bool redirect_stdin = has_stdin_redirect(tokens, &file_name_in);
+
+  // Determine whether to redirect stdout
+  char* file_name_out;
+  bool redirect_stdout = has_stdout_redirect(tokens, &file_name_out);
+
+  size_t tokens_length = tokens_get_length(tokens);
+  char** argv = malloc(sizeof(char*) * (tokens_length + 1));
+  if (argv == NULL) {
+    printf("execute_program: failed to allocate memory for arguments");
+    return;
+  }
+
+  size_t argv_index = 0;
+  for (size_t i = 0; i < tokens_length; i++) {
+    char* token = tokens_get_token(tokens, i);
+    if (strcmp(token, "<") == 0 || strcmp(token, ">") == 0) {
+      break;
+    }
+    argv[argv_index++] = token;
+  }
+  argv[argv_index] = NULL;
+
   pid_t pid = fork();
   if (pid == 0) {
-    size_t argc = tokens_get_length(tokens);
-    char** argv = malloc(sizeof(char*) * (argc + 1));
+    if (redirect_stdin) {
+      int fd = open(file_name_in, O_RDONLY);
 
-    if (argv == NULL) {
-      printf("execute_program: failed to allocate memory for arguments");
-      return;
+      if (fd < 0) {
+        printf("execute_program: failed to open stdin redirect file %s\n", file_name_in);
+        exit(1);
+      }
+
+      dup2(fd, STDIN_FILENO);
+      close(fd);
     }
 
-    for (size_t i = 0; i < argc; ++i) {
-      argv[i] = tokens_get_token(tokens, i);
+    if (redirect_stdout) {
+      int fd = open(file_name_out, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+      if (fd < 0) {
+        printf("execute_program: failed to open stdout redirect file %s\n", file_name_out);
+        exit(1);
+      }
+
+      dup2(fd, STDOUT_FILENO);
+      close(fd);
     }
-    argv[argc] = NULL;
 
     execv(program_path, argv);
     perror("execv failed");
@@ -201,9 +273,10 @@ void execute_program(struct tokens* tokens) {
     wait(NULL);
   }
 
-  if(resolved_program_path){
+  if (resolved_program_path) {
     free(program_path);
   }
+  free(argv);
 }
 
 int main(unused int argc, unused char* argv[]) {
