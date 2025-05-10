@@ -62,11 +62,11 @@ int cmd_help(unused struct tokens* tokens) {
 int cmd_exit(unused struct tokens* tokens) { exit(0); }
 
 /* Prints the current working directory to standard output */
-int cmd_pwd(unused struct tokens* tokens){
+int cmd_pwd(unused struct tokens* tokens) {
   char cwd[PATH_MAX];
 
-  if(getcwd(cwd, sizeof(cwd)) != NULL){
-    printf("%s\n",cwd);
+  if (getcwd(cwd, sizeof(cwd)) != NULL) {
+    printf("%s\n", cwd);
   } else {
     perror("getcwd() error");
     return 1;
@@ -75,14 +75,14 @@ int cmd_pwd(unused struct tokens* tokens){
 }
 
 /* Takes one argument, a directory path, and changes the current working directory to that directory */
-int cmd_cd(struct tokens* tokens){
-  char *directory = tokens_get_token(tokens, 1);
-  if(directory == NULL){
+int cmd_cd(struct tokens* tokens) {
+  char* directory = tokens_get_token(tokens, 1);
+  if (directory == NULL) {
     perror("missing directory argument");
     return 1;
   }
 
-  if(chdir(directory) != 0){
+  if (chdir(directory) != 0) {
     printf("chdir failed with errno %d: %s\n", errno, strerror(errno));
     return 1;
   }
@@ -124,6 +124,36 @@ void init_shell() {
   }
 }
 
+void execute_program(struct tokens* tokens) {
+  char* program_path = tokens_get_token(tokens, 0);
+  if (program_path == NULL) {
+    printf("execute_program: missing program path");
+    return;
+  }
+
+  pid_t pid = fork();
+  if (pid == 0) {
+    size_t argc = tokens_get_length(tokens);
+    char** argv = malloc(sizeof(char*) * (argc + 1));
+
+    if (argv == NULL) {
+      printf("execute_program: failed to allocate memory for arguments");
+      return;
+    }
+
+    for (size_t i = 0; i < argc; ++i) {
+      argv[i] = tokens_get_token(tokens, i);
+    }
+    argv[argc] = NULL;
+
+    execv(program_path, argv);
+    perror("execv failed");
+    return;
+  } else {
+    wait(NULL);
+  }
+}
+
 int main(unused int argc, unused char* argv[]) {
   init_shell();
 
@@ -144,8 +174,7 @@ int main(unused int argc, unused char* argv[]) {
     if (fundex >= 0) {
       cmd_table[fundex].fun(tokens);
     } else {
-      /* REPLACE this to run commands as programs. */
-      fprintf(stdout, "This shell doesn't know how to run programs.\n");
+      execute_program(tokens);
     }
 
     if (shell_is_interactive)
