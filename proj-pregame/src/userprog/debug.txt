@@ -1,0 +1,6 @@
+Printed top two words at top of the stack at syscall.c instruction int $0x30
+0xbfffff8c:     0x00000001      0x000000a2
+
+args[0] = 1 corresponds to SYS_EXIT
+args[1] = 0xa2 corresponds to exit(162)
+These values match exactly what I saw on the user stack before the system call

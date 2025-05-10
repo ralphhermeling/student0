@@ -1,0 +1,172 @@
+1.1.1
+The server creates a new POSIX thread for each request. The transfer method checks whether the donor is able to transfer the money to the recipient by checking the balance and seeing if the balance is larger than the transfer amount. 
+The current implementation is subject to a race condition, because it does not guarantee mutual exclusion when reading/writing to the balance. 
+So in theory a malicious person could concurrently transfer money for the same donor and the separate threads could read a stale value for the balance and transfer money the donor does not have. 
+There's another problem where you dont have mutual exclusion for the recipient, so what can happen is that a stale balance for the recipient isused to add the transfer amount to. This can result in an invalid total for the recipient.
+
+To combat both issues I would introduce a lock in the account struct such that you guarantee only one thread at a time can mutate and from the account. This ensures the total amount is correct.
+
+1.1.2
+Introduce a Semaphore for each server, initialized to 1000, to control the ability to connect to the game.
+A player will down the semaphore before connecting and up the semaphore after disconnecting.
+The order here is important - downing the semaphore after connecting but before playing means that there is no block on the connect() call,
+and upping the semaphore before disconnecting could lead to "zombie" players, who were preempted before disconnecting. 
+
+1.2
+int old = sum;
+int new = old + term;
+while(!compare_and_swap(&sum, old, new));
+
+1.3
+Implement a wait functionality that allows the main thread to wait for another thread to finish writing some data.
+So we want to let the main thread sleep let the worker thread write some data and then wake up the main thread.
+Another requirement is that the shared data needs to be freed once as soon at it is no longer in use.
+typedef struct shared_data {
+  sem_t semaphore;
+  pthread_mutex_t lock;
+  int ref_cnt;
+  int data;
+} shared_data_t;
+
+The semaphore is used to schedule the main thread to be ran after the data is written to shared_data.
+The lock is used to concurrently save_data that is multiple threads are able to write to shared_data concurrently safely without race condition.
+The ref_cnt is used to determine whether the shared_data is being used and when the ref_cnt equals zero we know it is no longer being used and can be freed.
+Data is used to store the actual data part in shared_data.
+
+semaphore is used to implement the scheduling workflow. A waiting thread downs the semaphore
+while the thread that saves the data ups the semaphore.
+lock allows for mutual exclusion on members in the struct that can be modified by both threads.
+ref_cnt allows for reference counting, which is an indicator for how many threads still hold a
+reference to this struct. Once the reference count reaches 0, we can safely deallocate the struct from memory.
+data is the actual data.
+
+void initialize_shared_data(shared_data_t* shared_data) {
+ sem_init(&shared_data->semaphore, 0, 0);
+ pthread_mutex_init(&shared_data->lock, NULL);
+ shared_data->ref_cnt = 2;
+ shared_data->data = -1;
+}
+
+int wait_for_data(shared_data_t* shared_data) {
+  sem_wait(&shared_data->semaphore);
+  int data = shared_data->data;
+  pthread_mutex_lock(&shared_data->lock);
+  int ref_cnt = --shared_data->ref_cnt;
+  pthread_mutex_unlock(&shared_data->lock);
+  if (ref_cnt == 0)
+    free(shared_data);
+  return data;
+}
+
+void* save_data(void* shared_pg) {
+ shared_data_t *shared_data = (shared_data_t*)shared_pg;
+ shared_data->data = 162;
+ pthread_mutex_lock(&shared_data->lock);
+ sem_post(&shared_data->semaphore);
+ int ref_cnt = --shared_data->ref_cnt;
+ pthread_mutex_unlock(&shared_data->lock);
+ if (ref_cnt == 0)
+   free(shared_data);
+ return NULL;
+}
+
+The semaphore guarantees that the main thread will never access shared_data->data before the other thread sets it.
+Similarly shared_data->data is never modified by the other thread afterwards so the main thread is guaranteed to have the correct value by the time it is unblocked from the semaphore.
+
+2.1
+This program will not run because the thread needs to be holding a lock before performing a condition variable operation like wait or signal.
+Moreover, the lock and condition variable were never initialized, which would lead to undefined behavior.
+
+2.2
+int ben = 0;
+pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
+pthread_cond_t cv = PTHREAD_COND_INITIALIZER;
+
+void *helper(void *arg) {
+ pthread_mutex_lock(&lock);
+ ben += 1;
+ pthread_cond_signal(&cv);
+ pthread_mutex_unlock(&lock);
+ pthread_exit(NULL);
+}
+
+void main() {
+ pthread_t thread;
+ pthread_create(&thread, NULL, &helper, NULL);
+
+ pthread_yield();
+ pthread_mutex_lock(&lock);
+ while(ben != 1){
+   pthread_cond_wait(&cv, &lock);
+ }
+ if (ben == 1)
+ printf("Yeet Haw\n");
+ else
+ printf("Yee Howdy\n");
+ pthread_mutex_unlock(&lock);
+}
+
+2.2 Office Hours Queue
+
+typedef struct room {
+ pthread_mutex_t lock;
+ pthread_cond_t student_cv;
+ int waiting_students, active_students;
+ pthread_cond_t ta_cv, prof_cv;
+ int waiting_tas, active_tas;
+ int waiting_profs, active_profs;
+} room_t;
+
+enter_room(room_t* room, int mode) {
+ pthread_mutex_lock(&room->lock);
+ if (mode == 0) {
+ while(room->active_profs > 0 || room->waiting_profs > 0){
+   room->waiting_students++;
+   pthread_cond_wait(&room->student_cv, &room->lock);
+   room->waiting_students--;
+ }
+ room->active_students++;
+} else if (mode == 1) {
+ while(room->active_tas >= 9 || room->active_profs > 0 || room->waiting_profs > 0){
+   room->waiting_tas++;
+   pthread_cond_wait(&room->ta_cv, &room->lock);
+   room->waiting_tas--;
+ }
+ room->active_tas++;
+} else {
+ while(room->active_tas > 0 || room->active_students > 0 || room->active_profs > 0){
+   room->waiting_profs++;
+   pthread_cond_wait(&room->prof_cv, &room->lock);
+   room->waiting_profs--;
+ }
+ room->active_profs++;
+}
+ pthread_mutex_unlock(&room->lock);
+}
+
+exit_room(room_t* room, int mode) {
+ pthread_mutex_lock(&room->lock);
+ if (mode == 0) {
+ room->active_students--;
+ if(room->active_students + room->active_tas == 0 && room->waiting_profs > 0){
+   pthread_cond_signal(&room->prof_cv, &room->lock);
+ }
+} else if (mode == 1) {
+ room->active_tas--;
+ if(room->active_students + room->active_tas == 0 && room->waiting_profs > 0){
+   pthread_cond_signal(&room->prof_cv, &room->lock);
+ } else if(room->active_tas < 9 && room->waiting_tas && room->waiting_profs == 0){
+   pthread_cond_signal(&room->tas_cv, &room->lock);
+ }
+} else {
+ room->active_profs--;
+ if(room->waiting_profs){
+   pthread_cond_signal(&room->prof_cv, &room->lock);
+ } else if (room->waiting_tas && room->waiting_profs == 0){
+   pthread_cond_broadcast(&room->tas_cv, &room->lock);
+ } else if (room->waiting_students && room->waiting_profs == 0){
+   pthread_cond_broadcast(&room->student_cv, &room->lock);
+ }
+}
+ pthread_mutex_unlock(&room->lock);
+}

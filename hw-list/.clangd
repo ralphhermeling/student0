@@ -1,0 +1,2 @@
+CompileFlags:
+  Add: [-DPINTOS_LIST, -DPTHREADS]

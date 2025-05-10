@@ -1,0 +1,57 @@
+Read pthread.c carefully. Then, run make and run pthread multiple times and observe its output. Answer the following questions based on your observations.
+
+1. Is the program’s output the same each time it is run? Why or why not?
+The program's output is not the same each time it is run. This is because the program has race conditions.
+Meaning that the behavior of the program depends on the interleaving of operations of different threads' access to shared memory.
+Multiple threads are running concurrently and: the order in which threads are scheduled by the OS is non-deterministic: thread #0 may print before thread #1 in one run, but after in another.
+They also access a shared memory region common without synchronization.You are seeing overlapping and garbled outputs like:
+I am on the heap.
+58bf23e5b2a0:  am on the heap.
+58bf23e5b2a0: am on the heap.
+Each thread is modifying and printing from the same memory (e.g., a shared buffer like char* common = malloc(...)) without a mutex or lock, causing race conditions.
+
+Standard output (stdout) is not thread-safe at the application level.
+
+Multiple threads writing to printf() at once can cause interleaved or corrupted output.
+
+2. Based on the program’s output, do multiple threads share the same stack?
+The program's output returns: 
+
+Thread #0 stack: 737f822c1e40 common: 55dacd182010 (162) tptr: 0
+Thread #1 stack: 737f81ac0e40 common: 55dacd182010 (163) tptr: 1
+Thread #2 stack: 737f812bfe40 common: 55dacd182010 (164) tptr: 2
+Thread #3 stack: 737f80a9ee40 common: 55dacd182010 (165) tptr: 3
+
+this shows that each stack has a different memory address for their stack. This implies that they do not share the same stack.
+
+Based on the program’s output, do multiple threads share the same global variables?
+common is a global variable and it's memory address is printed by each thread.
+The program's output shows that each thread prints the same memory address for common. 
+This implies that multiple threads share the same global variables.
+
+Based on the program’s output, what is the value of void *threadid? How does this relate to the variable’s type (void *)?
+threadid is a pointer-sized integer holding a small number (e.g. 0, 1, 2, 3), representing the thread index.
+void * is a generic pointer type, meaning it can point to any type.
+But in this program, I'm using it as a generic integer container by casting a number into it.
+The thread function doesn't dereference the pointer, just casts it back to a number. So it's being used as an opaque ID.
+
+Using the first command line argument, create a large number of threads in pthread. Do all threads run before the program exits? Why or why not? Note: Please be precise. Vague responses will not be given credit
+If t = 2_000_000, then:
+
+c
+Copy
+Edit
+void* threadid = (void*)2000000;   // Looks like address 0x1E8480
+Now imagine this:
+
+c
+Copy
+Edit
+printf("%s\n", somethingshared + tid);
+If tid = 2000000, that line becomes:
+
+c
+Copy
+Edit
+printf("%s\n", somethingshared + 2000000);  // 2 million chars beyond the buffer
+This is a huge out-of-bounds read — which will segfault, even if somethingshared is allocated.

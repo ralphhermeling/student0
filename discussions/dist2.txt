@@ -1,0 +1,36 @@
+#1
+1. Possible outputs are: 
+- HELPER printed then MAIN
+- MAIN printed then HELPER. How to ensure HELPER is printed before main is to wait for thread to finish before printing main. 
+You can accomplish this by calling pthread_join on the helper thread.
+
+2. This prints i is 2.
+3. This program exhibits undefined behavior due to a dangling pointer passed to the thread.
+It may print 162 if the thread happens to run before spawn_thread() returns.
+It may print garbage, crash, or cause memory errors.
+All outcomes are valid under undefined behavior.
+
+#2
+1. Fopen is part of the High-level API that operates on streams of data, which are unformatted sequences of bytes with a position. An open stream is represented by a pointer to FILE, which contains information pertaining to an open stream such as the file descriptor. Fopen specifically opens the file associated with pathname and associates a stream with it. It returns a *FILE or NULL on an error.
+Open is part of the Low-level API that operates directly with file descriptors which are indices into a file descriptor table. Open specifically opens a file specified by pathname with access control permissions flags. It returns a file descriptor (int) or -1 on an error. 
+
+2.
+The file test.txt will contain:
+
+200 'a's
+
+400 zero bytes (hole)
+
+100 'a's 
+
+2.2
+1. Contrary to fread and write, read and write are not guaranteed to read and write the specified size. As a result, we need the while loop to make sure the desired number of bytes are read and written.
+
+2.3
+1. The first three steps that a server needs to perform to be able to accept new connections are: 
+- Create server socket using socket syscall
+- Bind the server socket to a specific address using bind syscall
+- Start listening for connections using listen syscall
+2. serve_client. It has the basic outline of reading what the client sent and writing it back. 
+3. An explicit close of the client socket is required. 
+4. Each connection is handled in the same process, meaning a malicous connection could attack the server and make the server and other clients vulnerable. If every connection was handled in a new process, the server and other clients would still be safe.

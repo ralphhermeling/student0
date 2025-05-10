@@ -1,1 +1,3 @@
 Copy struct threads: dumplist &all_list thread allelem
+
+Print top two words at the top of the stack: x/2xw $esp
