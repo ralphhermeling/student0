@@ -124,11 +124,59 @@ void init_shell() {
   }
 }
 
+char* resolve_program_path(char* program_name) {
+  // Look for program on PATH
+  char* path = getenv("PATH");
+  if (path == NULL) {
+    printf("execute_program: path environment variable not set\n");
+    return NULL;
+  }
+
+  char* rest;
+  char* directory = strtok_r(path, ":", &rest);
+  size_t len_program_name = strlen(program_name);
+  while (directory != NULL) {
+    size_t len_directory = strlen(directory);
+    char* program_path = malloc(len_directory + len_program_name + 2);
+    if (program_path == NULL) {
+      directory = strtok_r(NULL, ":", &rest);
+      continue;
+    }
+
+    memcpy(program_path, directory, len_directory);
+    program_path[len_directory] = '/';
+    memcpy(program_path + len_directory + 1, program_name, len_program_name + 1);
+
+    if (access(program_path, X_OK) == 0) {
+      return program_path;
+    }
+
+    free(program_path);
+    directory = strtok_r(NULL, ":", &rest);
+  }
+
+  return NULL;
+}
+
 void execute_program(struct tokens* tokens) {
-  char* program_path = tokens_get_token(tokens, 0);
-  if (program_path == NULL) {
-    printf("execute_program: missing program path");
+  char* program_argument = tokens_get_token(tokens, 0);
+  if (program_argument == NULL) {
+    printf("execute_program: missing program argument\n");
     return;
+  }
+
+  bool resolved_program_path = false;
+  char* program_path = program_argument;
+  // See if file exists and is executable
+  if (access(program_argument, X_OK) != 0) {
+    program_path = resolve_program_path(program_argument);
+
+    if (program_path == NULL) {
+      printf("execute_program: unable to find program %s \n", program_argument);
+      return;
+    } else {
+      resolved_program_path = true;
+    }
   }
 
   pid_t pid = fork();
@@ -151,6 +199,10 @@ void execute_program(struct tokens* tokens) {
     return;
   } else {
     wait(NULL);
+  }
+
+  if(resolved_program_path){
+    free(program_path);
   }
 }
 
