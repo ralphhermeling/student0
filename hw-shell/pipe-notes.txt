@@ -1,0 +1,33 @@
+Support indefinite number of pipes in series
+Pipe the output of one process to the input of another process
+There will always be spaces around the special character "|"
+
+pipe syscall
+when pipe is opened two file descriptions are created: 
+- one for the read end
+- one for the write end
+after calling fds[0] gets set the file descriptor for the read end of the pipe 
+and fds[1] gets set to that of the write end
+
+when a proccess tries to read from the read end of the pipe it will block until data shows up at the write end
+
+when all file descriptors pointing to the write end of the pipe have been closed calling read on the other end of the 
+pipe will return EOF (i.e. 0).
+
+pipes have limited capacity
+when pipe is full the writing process will block
+when all file descriptors pointing to the read end of the pipe have been closed writing to the pipe will raise SIGPIPE signal
+
+P1 parent process and P2 child process pipe from P1 to P2
+P1 can happily write data to the write end and P2 will continue to read this data until: 
+- P1 chooses to stop sending data, in which case P1 would simply call close(4)
+- P2 chooes to stop reading data, in which case P2 would simply call close(3)
+In case 1 after P1 closes its write end, P2 will be notified there's nothing left to read: the read syscall will return 0 byte read
+In case 2 after p2 closes its read-end, P1 will be notified there's no one left to read the data (via the SIGPIPE signal)
+
+Recommended approach for piping:
+
+First determine the number of processes n
+Then let process i of n treat the output of process i - 1 as stdin
+and process i sends its stdout into process i + 1 stdin
+Having n processes means we need n - 1 pipes

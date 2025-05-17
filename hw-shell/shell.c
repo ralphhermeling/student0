@@ -138,7 +138,6 @@ char* resolve_program_path(char* program_name) {
     return NULL;
   }
 
-
   char* rest;
   char* directory = strtok_r(path, ":", &rest);
   size_t len_program_name = strlen(program_name);
@@ -279,6 +278,132 @@ void execute_program(struct tokens* tokens) {
   free(argv);
 }
 
+void execute_with_pipes(struct tokens* tokens, size_t pipe_num) {
+  /* Number of processes */
+  int p_num = pipe_num + 1;
+  int pipe_arr[pipe_num][2];
+
+  /* Initialize n-1 pipes */
+  for (int i = 0; i < pipe_num; i++) {
+    if (pipe(pipe_arr[i]) != 0) {
+      perror("pipe");
+      return;
+    }
+  }
+
+  int end_previous_token_sequence = -1;
+  int tokens_length = tokens_get_length(tokens);
+  for (int i = 0; i < p_num; i++) {
+    pid_t pid = fork();
+    if (pid < 0) {
+      perror("fork");
+      return;
+    }
+
+    if (pid == 0) {
+      if (i > 0) {
+        dup2(pipe_arr[i - 1][0], STDIN_FILENO);
+      }
+
+      if (i < p_num - 1) {
+        dup2(pipe_arr[i][1], STDOUT_FILENO);
+      }
+
+      /* Close all pipe FDs in child */
+      for (int j = 0; j < pipe_num; j++) {
+        close(pipe_arr[j][0]);
+        close(pipe_arr[j][1]);
+      }
+
+      int s = end_previous_token_sequence + 1;
+      int e = s;
+
+      while (e < tokens_length && strcmp(tokens_get_token(tokens, e), "|") != 0) {
+        e++;
+      }
+
+      char* file_name_in = NULL;
+      bool redirect_stdin = false;
+      char* file_name_out = NULL;
+      bool redirect_stdout = false;
+
+      size_t argv_index = 0;
+      char* argv[128];
+
+      for (int k = s; k < e; k++) {
+        char* token = tokens_get_token(tokens, k);
+        if (strcmp(token, "<") == 0 && k + 1 < e) {
+          file_name_in = tokens_get_token(tokens, ++k);
+          redirect_stdin = true;
+        } else if (strcmp(token, ">") == 0 && k + 1 < e) {
+          file_name_out = tokens_get_token(tokens, ++k);
+          redirect_stdout = true;
+        } else {
+          argv[argv_index++] = token;
+        }
+      }
+
+      argv[argv_index] = NULL;
+
+      if (argv[0] == NULL) {
+        printf("missing program argument \n");
+        return;
+      }
+
+      char* program_path = argv[0];
+      bool resolved_program_path = false;
+      if (access(argv[0], X_OK) != 0) {
+        program_path = resolve_program_path(argv[0]);
+        if (program_path == NULL) {
+          printf("execute_program: unable to find program %s\n", argv[0]);
+          exit(1);
+        }
+        resolved_program_path = true;
+      }
+
+      if (redirect_stdin) {
+        int fd = open(file_name_in, O_RDONLY);
+        if (fd < 0) {
+          printf("execute_program: failed to open stdin file %s\n", file_name_in);
+          exit(1);
+        }
+        dup2(fd, STDIN_FILENO);
+        close(fd);
+      }
+
+      if (redirect_stdout) {
+        int fd = open(file_name_out, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+        if (fd < 0) {
+          printf("execute_program: failed to open stdout file %s\n", file_name_out);
+          exit(1);
+        }
+        dup2(fd, STDOUT_FILENO);
+        close(fd);
+      }
+
+      execv(program_path, argv);
+      perror("execv failed");
+      if (resolved_program_path)
+        free(program_path);
+    }
+
+    while (end_previous_token_sequence + 1 < tokens_length &&
+           strcmp(tokens_get_token(tokens, end_previous_token_sequence + 1), "|") != 0) {
+      end_previous_token_sequence++;
+    }
+    end_previous_token_sequence++;
+  }
+
+  for (int i = 0; i < pipe_num; i++) {
+    close(pipe_arr[i][0]);
+    close(pipe_arr[i][1]);
+  }
+
+  for (int i = 0; i < p_num; i++) {
+    wait(NULL);
+  }
+}
+
 int main(unused int argc, unused char* argv[]) {
   init_shell();
 
@@ -293,13 +418,25 @@ int main(unused int argc, unused char* argv[]) {
     /* Split our line into words. */
     struct tokens* tokens = tokenize(line);
 
-    /* Find which built-in function to run. */
-    int fundex = lookup(tokens_get_token(tokens, 0));
+    size_t pipe_num = 0;
+    /* Determine the number of pipes by counting the | words */
+    for (size_t t = 0; t < tokens_get_length(tokens); t++) {
+      if (strcmp(tokens_get_token(tokens, t), "|") == 0) {
+        pipe_num++;
+      }
+    }
 
-    if (fundex >= 0) {
-      cmd_table[fundex].fun(tokens);
+    if (pipe_num == 0) {
+      /* Find which built-in function to run. */
+      int fundex = lookup(tokens_get_token(tokens, 0));
+
+      if (fundex >= 0) {
+        cmd_table[fundex].fun(tokens);
+      } else {
+        execute_program(tokens);
+      }
     } else {
-      execute_program(tokens);
+      execute_with_pipes(tokens, pipe_num);
     }
 
     if (shell_is_interactive)
