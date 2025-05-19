@@ -326,9 +326,6 @@ size_t get_num_of_pipes(struct tokens* tokens) {
 }
 
 void execute_with_pipes(struct tokens* tokens, size_t pipe_num) {
-  /* TODO: process executing as the same job, e.g., a single input to the shell as a pipeline, are placed in the same group. 
-  Also, the choice of process group id is the pid of the process. */
-
   /* Number of processes */
   int p_num = pipe_num + 1;
   int pipe_arr[pipe_num][2];
@@ -341,8 +338,10 @@ void execute_with_pipes(struct tokens* tokens, size_t pipe_num) {
     }
   }
 
+  struct sigaction sa_old_int, sa_old_tstp, sa_ignore, sa_old_ttou, sa_old_ttin;
   int end_previous_token_sequence = -1;
   int tokens_length = tokens_get_length(tokens);
+  pid_t pid_first_job = -1;
   for (int i = 0; i < p_num; i++) {
     pid_t pid = fork();
     if (pid < 0) {
@@ -350,7 +349,25 @@ void execute_with_pipes(struct tokens* tokens, size_t pipe_num) {
       return;
     }
 
+    /* Child */
     if (pid == 0) {
+      if (pid_first_job == -1) {
+        pid_first_job = getpid();
+        setpgid(0, pid_first_job);
+      }
+
+      if (i == 0) {
+        // Ignore signals related to setting the process to the foreground
+
+        signal(SIGTTIN, SIG_IGN);
+        signal(SIGTTIN, SIG_IGN);
+
+        tcsetpgrp(STDIN_FILENO, pid_first_job);
+
+        signal(SIGTTOU, SIG_DFL);
+        signal(SIGTTIN, SIG_DFL);
+      }
+
       if (i > 0) {
         dup2(pipe_arr[i - 1][0], STDIN_FILENO);
       }
@@ -437,6 +454,20 @@ void execute_with_pipes(struct tokens* tokens, size_t pipe_num) {
         free(program_path);
     }
 
+    if (pid_first_job == -1) {
+      pid_first_job = pid;
+      setpgid(pid, pid);
+      sa_ignore.sa_handler = SIG_IGN;
+      sigemptyset(&sa_ignore.sa_mask);
+      sa_ignore.sa_flags = 0;
+      sigaction(SIGINT, &sa_ignore, &sa_old_int);
+      sigaction(SIGTSTP, &sa_ignore, &sa_old_tstp);
+      sigaction(SIGTTOU, &sa_ignore, &sa_old_ttou);
+      sigaction(SIGTTIN, &sa_ignore, &sa_old_ttin);
+
+      tcsetpgrp(STDIN_FILENO, pid);
+    }
+
     while (end_previous_token_sequence + 1 < tokens_length &&
            strcmp(tokens_get_token(tokens, end_previous_token_sequence + 1), "|") != 0) {
       end_previous_token_sequence++;
@@ -452,6 +483,12 @@ void execute_with_pipes(struct tokens* tokens, size_t pipe_num) {
   for (int i = 0; i < p_num; i++) {
     wait(NULL);
   }
+
+  tcsetpgrp(STDIN_FILENO, getpid());
+  sigaction(SIGINT, &sa_old_int, NULL);
+  sigaction(SIGTSTP, &sa_old_tstp, NULL);
+  sigaction(SIGTTOU, &sa_old_ttou, NULL);
+  sigaction(SIGTTIN, &sa_old_ttin, NULL);
 }
 
 int main(unused int argc, unused char* argv[]) {
