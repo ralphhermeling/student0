@@ -195,6 +195,12 @@ bool has_stdout_redirect(struct tokens* tokens, char** file_name_out) {
 }
 
 void execute_program(struct tokens* tokens) {
+  int fundex = lookup(tokens_get_token(tokens, 0));
+  if (fundex >= 0) {
+    cmd_table[fundex].fun(tokens);
+    return;
+  }
+
   char* program_argument = tokens_get_token(tokens, 0);
   if (program_argument == NULL) {
     printf("execute_program: missing program argument\n");
@@ -240,8 +246,10 @@ void execute_program(struct tokens* tokens) {
   }
   argv[argv_index] = NULL;
 
+  pid_t shell_pid = getpgrp();
   pid_t pid = fork();
   if (pid == 0) {
+    // setpgid(0, 0);
     if (redirect_stdin) {
       int fd = open(file_name_in, O_RDONLY);
 
@@ -270,12 +278,24 @@ void execute_program(struct tokens* tokens) {
     return;
   } else {
     wait(NULL);
+    // tcsetpgrp(0, pid);
   }
 
   if (resolved_program_path) {
     free(program_path);
   }
   free(argv);
+}
+
+size_t get_num_of_pipes(struct tokens* tokens) {
+  size_t pipe_num = 0;
+  /* Determine the number of pipes by counting the | words */
+  for (size_t t = 0; t < tokens_get_length(tokens); t++) {
+    if (strcmp(tokens_get_token(tokens, t), "|") == 0) {
+      pipe_num++;
+    }
+  }
+  return pipe_num;
 }
 
 void execute_with_pipes(struct tokens* tokens, size_t pipe_num) {
@@ -418,23 +438,9 @@ int main(unused int argc, unused char* argv[]) {
     /* Split our line into words. */
     struct tokens* tokens = tokenize(line);
 
-    size_t pipe_num = 0;
-    /* Determine the number of pipes by counting the | words */
-    for (size_t t = 0; t < tokens_get_length(tokens); t++) {
-      if (strcmp(tokens_get_token(tokens, t), "|") == 0) {
-        pipe_num++;
-      }
-    }
-
+    size_t pipe_num = get_num_of_pipes(tokens);
     if (pipe_num == 0) {
-      /* Find which built-in function to run. */
-      int fundex = lookup(tokens_get_token(tokens, 0));
-
-      if (fundex >= 0) {
-        cmd_table[fundex].fun(tokens);
-      } else {
-        execute_program(tokens);
-      }
+      execute_program(tokens);
     } else {
       execute_with_pipes(tokens, pipe_num);
     }
