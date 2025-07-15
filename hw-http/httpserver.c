@@ -18,6 +18,8 @@
 #include "libhttp.h"
 #include "wq.h"
 
+#define LISTEN_BACKLOG 1024
+
 /*
  * Global configuration variables.
  * You need to use these in your implementation of handle_files_request and
@@ -40,11 +42,74 @@ void serve_file(int fd, char* path) {
   /* TODO: PART 2 */
   /* PART 2 BEGIN */
 
+  int fd_file = open(path, O_RDONLY);
+  if (fd_file == -1) {
+    http_start_response(fd, 500);
+    http_send_header(fd, "Content-Type", "text/html");
+    http_end_headers(fd);
+    return;
+  }
+  printf("Opened file: %s\n", path);
+
+  ssize_t total_bytes_read = 0;
+  ssize_t bytes_per_read = 1024;
+  char* buffer = NULL;
+
+  printf("Start reading file \n");
+  while (1) {
+    char temp[bytes_per_read];
+    ssize_t bytes_read = read(fd_file, temp, bytes_per_read);
+    if (bytes_read == -1) {
+      perror("Failed to read file at path");
+      close(fd_file);
+      free(buffer);
+      http_start_response(fd, 500);
+      http_send_header(fd, "Content-Type", "text/html");
+      http_end_headers(fd);
+      return;
+    }
+
+    if (bytes_read == 0) {
+      break; // EOF
+    }
+
+    char* temp_buffer = realloc(buffer, total_bytes_read + bytes_read);
+    if (temp_buffer == NULL) {
+      perror("Failed to realloc buffer");
+      close(fd_file);
+      free(buffer);
+      http_start_response(fd, 500);
+      http_send_header(fd, "Content-Type", "text/html");
+      http_end_headers(fd);
+      return;
+    }
+    buffer = temp_buffer;
+
+    memcpy(buffer + total_bytes_read, temp, bytes_read);
+    total_bytes_read += bytes_read;
+  }
+  printf("Read file, total bytes read: %zu\n", total_bytes_read);
+
+  close(fd_file);
+
+  char content_length_str[32];
+  snprintf(content_length_str, sizeof(content_length_str), "%zu", total_bytes_read);
+
   http_start_response(fd, 200);
   http_send_header(fd, "Content-Type", http_get_mime_type(path));
-  http_send_header(fd, "Content-Length", "0"); // TODO: change this line too
+  http_send_header(fd, "Content-Length", content_length_str);
   http_end_headers(fd);
+  ssize_t total_written = 0;
+  while (total_written < total_bytes_read) {
+    ssize_t bytes_written = write(fd, buffer + total_written, total_bytes_read - total_written);
+    if (bytes_written == -1) {
+      perror("write failed");
+      break;
+    }
+    total_written += bytes_written;
+  }
 
+  free(buffer);
   /* PART 2 END */
 }
 
@@ -117,6 +182,21 @@ void handle_files_request(int fd) {
    */
 
   /* PART 2 & 3 BEGIN */
+
+  /* Check if file exists at path */
+  struct stat buffer;
+  if (stat(path, &buffer) != 0) {
+    http_start_response(fd, 404);
+    http_send_header(fd, "Content-Type", "text/html");
+    http_end_headers(fd);
+    close(fd);
+    return;
+  }
+
+  printf("File exists at path: %s\n", path);
+  printf("File size: %zu\n", buffer.st_size);
+
+  serve_file(fd, path);
 
   /* PART 2 & 3 END */
 
@@ -263,6 +343,15 @@ void serve_forever(int* socket_number, void (*request_handler)(int)) {
    */
 
   /* PART 1 BEGIN */
+  if (bind(*socket_number, (struct sockaddr*)&server_address, sizeof(server_address)) == -1) {
+    perror("Failed to bind socket.");
+    exit(errno);
+  }
+
+  if (listen(*socket_number, LISTEN_BACKLOG) == -1) {
+    perror("Failed to accept connections on socket");
+    exit(errno);
+  }
 
   /* PART 1 END */
   printf("Listening on port %d...\n", server_port);
