@@ -162,10 +162,60 @@ void serve_directory(int fd, char* path) {
   }
 
   rewinddir(dirp);
-
-  while ((entry = readdir(dirp)) != NULL) {
+  const size_t initial_capacity = 8192;
+  char* buffer = malloc(initial_capacity);
+  if (buffer == NULL) {
+    http_start_response(fd, 500);
+    http_send_header(fd, "Content-Type", "text/html");
+    http_end_headers(fd);
+    closedir(dirp);
   }
 
+  size_t length = 0;
+  size_t capacity = initial_capacity;
+
+  length += snprintf(buffer, capacity,
+                     "<html><head><title>Index of %s</title></head><body>", path);
+  length += snprintf(buffer + length, capacity - length, "<h1>Index of %s</h1><ul>", path);
+
+  /* Buffer for each formatted href */
+  char href_buffer[1024];
+
+  /* Parent directory link */
+  http_format_href(href_buffer, path, "..");
+
+  /* Listing directory entries hrefs */
+  while ((entry = readdir(dirp)) != NULL) {
+    if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
+      continue;
+
+    http_format_href(href_buffer, path, entry->d_name);
+    length += snprintf(buffer + length, capacity - length, "<li>%s</li>", href_buffer);
+  }
+
+  length += snprintf(buffer + length, capacity - length, "</ul></body></html>");
+
+  closedir(dirp);
+
+  char len_buf[32];
+  snprintf(len_buf, sizeof(len_buf), "%zu", length);
+
+  http_start_response(fd, 200);
+  http_send_header(fd, "Content-Type", "text/html");
+  http_send_header(fd, "Content-Length", len_buf);
+  http_end_headers(fd);
+
+  ssize_t total_written = 0;
+  while (total_written < length) {
+    ssize_t bytes_written = write(fd, buffer + total_written, length - total_written);
+    if (bytes_written == -1) {
+      perror("write failed");
+      break;
+    }
+    total_written += bytes_written;
+  }
+
+  free(buffer);
   /* PART 3 END */
 }
 
