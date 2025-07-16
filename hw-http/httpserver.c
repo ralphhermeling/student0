@@ -9,6 +9,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -114,20 +115,56 @@ void serve_file(int fd, char* path) {
 }
 
 void serve_directory(int fd, char* path) {
-  http_start_response(fd, 200);
-  http_send_header(fd, "Content-Type", http_get_mime_type(".html"));
-  http_end_headers(fd);
-
   /* TODO: PART 3 */
   /* PART 3 BEGIN */
+  DIR* dirp = opendir(path);
+  if (dirp == NULL) {
+    http_start_response(fd, 500);
+    http_send_header(fd, "Content-Type", "text/html");
+    http_end_headers(fd);
+    return;
+  }
 
-  // TODO: Open the directory (Hint: opendir() may be useful here)
+  int dir_contains_index_html = 0;
+  struct dirent* entry;
 
-  /**
-   * TODO: For each entry in the directory (Hint: look at the usage of readdir() ),
-   * send a string containing a properly formatted HTML. (Hint: the http_format_href()
-   * function in libhttp.c may be useful here)
-   */
+  while ((entry = readdir(dirp)) != NULL) {
+    if (strcmp(entry->d_name, "index.html") == 0) {
+      dir_contains_index_html = 1;
+      break;
+    }
+  }
+
+  if (dir_contains_index_html) {
+    /* Add `/index.html` to the end of the path */
+    char* index_html = "/index.html";
+    size_t path_len = strlen(path);
+    size_t index_len = strlen(index_html);
+
+    char* path_including_index_html = malloc(path_len + index_len + 1);
+    if (path_including_index_html == NULL) {
+      http_start_response(fd, 500);
+      http_send_header(fd, "Content-Type", "text/html");
+      http_end_headers(fd);
+      closedir(dirp);
+      return;
+    }
+
+    memcpy(path_including_index_html, path, path_len);
+    memcpy(path_including_index_html + path_len, index_html, index_len + 1);
+
+    serve_file(fd, path_including_index_html);
+
+    free(path_including_index_html);
+
+    closedir(dirp);
+    return;
+  }
+
+  rewinddir(dirp);
+
+  while ((entry = readdir(dirp)) != NULL) {
+  }
 
   /* PART 3 END */
 }
@@ -185,7 +222,7 @@ void handle_files_request(int fd) {
 
   /* Check if file exists at path */
   struct stat buffer;
-  if (stat(path, &buffer) != 0) {
+  if (stat(path, &buffer) == -1) {
     http_start_response(fd, 404);
     http_send_header(fd, "Content-Type", "text/html");
     http_end_headers(fd);
@@ -193,10 +230,13 @@ void handle_files_request(int fd) {
     return;
   }
 
-  printf("File exists at path: %s\n", path);
-  printf("File size: %zu\n", buffer.st_size);
+  if (S_ISREG(buffer.st_mode) != 0) {
+    serve_file(fd, path);
+  }
 
-  serve_file(fd, path);
+  else if (S_ISDIR(buffer.st_mode) != 0) {
+    serve_directory(fd, path);
+  }
 
   /* PART 2 & 3 END */
 
