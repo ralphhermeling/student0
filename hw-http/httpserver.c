@@ -497,6 +497,18 @@ void init_thread_pool(int num_threads, void (*request_handler)(int)) {
 }
 #endif
 
+struct thread_request_handler {
+  int client_socket;
+  void (*request_handler)(int);
+};
+
+void* handle_request_thread(void* arg) {
+  struct thread_request_handler* h = (struct thread_request_handler*)arg;
+  h->request_handler(h->client_socket);
+  free(h);
+  return NULL;
+}
+
 /*
  * Opens a TCP stream socket on all interfaces with port number PORTNO. Saves
  * the fd number of the server socket in *socket_number. For each accepted
@@ -600,8 +612,7 @@ void serve_forever(int* socket_number, void (*request_handler)(int)) {
     if (pid < 0) {
       perror("Error forking process");
       continue;
-    }
-    else if (pid == 0) {
+    } else if (pid == 0) {
       request_handler(client_socket_number);
       shutdown(client_socket_number, SHUT_RDWR);
       close(client_socket_number);
@@ -622,6 +633,17 @@ void serve_forever(int* socket_number, void (*request_handler)(int)) {
      */
 
     /* PART 6 BEGIN */
+    struct thread_request_handler* h = malloc(sizeof(struct thread_request_handler));
+    if(h == NULL){
+      perror("Failed to allocate thread responsible for handling client connection");
+      continue;
+    }
+    h->client_socket = client_socket_number;
+    h->request_handler = request_handler;
+
+    pthread_t tid;
+    pthread_create(&tid, NULL, handle_request_thread, h);
+    pthread_detach(tid);
 
     /* PART 6 END */
 #elif POOLSERVER
