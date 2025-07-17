@@ -50,13 +50,11 @@ void serve_file(int fd, char* path) {
     http_end_headers(fd);
     return;
   }
-  printf("Opened file: %s\n", path);
 
   ssize_t total_bytes_read = 0;
   ssize_t bytes_per_read = 1024;
   char* buffer = NULL;
 
-  printf("Start reading file \n");
   while (1) {
     char temp[bytes_per_read];
     ssize_t bytes_read = read(fd_file, temp, bytes_per_read);
@@ -89,7 +87,6 @@ void serve_file(int fd, char* path) {
     memcpy(buffer + total_bytes_read, temp, bytes_read);
     total_bytes_read += bytes_read;
   }
-  printf("Read file, total bytes read: %zu\n", total_bytes_read);
 
   close(fd_file);
 
@@ -358,7 +355,6 @@ void* forward_bytes(void* arg) {
  *   Closes client socket (fd) and proxy target fd (target_fd) when finished.
  */
 void handle_proxy_request(int fd) {
-  printf("Start handle_proxy_request\n");
   /*
   * The code below does a DNS lookup of server_proxy_hostname and
   * opens a connection to it. Please do not modify.
@@ -407,7 +403,6 @@ void handle_proxy_request(int fd) {
 
   /* TODO: PART 4 */
   /* PART 4 BEGIN */
-  printf("Setting up c2t and t2c fd structs \n");
   struct proxy_fd* client_forward = malloc(sizeof(struct proxy_fd));
   if (client_forward == NULL) {
     /* Dummy request parsing, just to be compliant. */
@@ -447,11 +442,9 @@ void handle_proxy_request(int fd) {
   target_forward->done_mutex = &is_done_mutex;
   target_forward->is_done = &is_done_val;
 
-  printf("Finished setting up c2t and t2c fd structs \n");
   pthread_t thread_id_client_forward;
   pthread_t thread_id_target_forward;
 
-  printf("Starting forwarding threads. \n");
   pthread_create(&thread_id_client_forward, NULL, forward_bytes, client_forward);
   pthread_create(&thread_id_target_forward, NULL, forward_bytes, target_forward);
 
@@ -481,7 +474,11 @@ void* handle_clients(void* void_request_handler) {
 
   /* TODO: PART 7 */
   /* PART 7 BEGIN */
-
+  int client_socket_number;
+  while((client_socket_number = wq_pop(&work_queue))){
+    request_handler(client_socket_number);
+  }
+  return NULL;
   /* PART 7 END */
 }
 
@@ -492,10 +489,33 @@ void init_thread_pool(int num_threads, void (*request_handler)(int)) {
 
   /* TODO: PART 7 */
   /* PART 7 BEGIN */
+  wq_init(&work_queue);
+  work_queue.num_threads = num_threads;
+  work_queue.threads = malloc(sizeof(pthread_t) * num_threads);
+  if(work_queue.threads == NULL){
+    perror("Failed to allocate thread pool");
+    exit(1);
+  }
+  
+  for(size_t i = 0; i < num_threads; i++){
+    pthread_create(&work_queue.threads[i], NULL, handle_clients, request_handler);
+  }
 
   /* PART 7 END */
 }
 #endif
+
+struct thread_request_handler {
+  int client_socket;
+  void (*request_handler)(int);
+};
+
+void* handle_request_thread(void* arg) {
+  struct thread_request_handler* h = (struct thread_request_handler*)arg;
+  h->request_handler(h->client_socket);
+  free(h);
+  return NULL;
+}
 
 /*
  * Opens a TCP stream socket on all interfaces with port number PORTNO. Saves
@@ -600,8 +620,7 @@ void serve_forever(int* socket_number, void (*request_handler)(int)) {
     if (pid < 0) {
       perror("Error forking process");
       continue;
-    }
-    else if (pid == 0) {
+    } else if (pid == 0) {
       request_handler(client_socket_number);
       shutdown(client_socket_number, SHUT_RDWR);
       close(client_socket_number);
@@ -622,6 +641,17 @@ void serve_forever(int* socket_number, void (*request_handler)(int)) {
      */
 
     /* PART 6 BEGIN */
+    struct thread_request_handler* h = malloc(sizeof(struct thread_request_handler));
+    if (h == NULL) {
+      perror("Failed to allocate thread responsible for handling client connection");
+      continue;
+    }
+    h->client_socket = client_socket_number;
+    h->request_handler = request_handler;
+
+    pthread_t tid;
+    pthread_create(&tid, NULL, handle_request_thread, h);
+    pthread_detach(tid);
 
     /* PART 6 END */
 #elif POOLSERVER
@@ -634,6 +664,7 @@ void serve_forever(int* socket_number, void (*request_handler)(int)) {
      */
 
     /* PART 7 BEGIN */
+    wq_push(&work_queue, client_socket_number);
 
     /* PART 7 END */
 #endif

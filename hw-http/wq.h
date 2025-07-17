@@ -17,7 +17,8 @@ typedef struct wq {
   wq_item_t* head;
   pthread_mutex_t mutex;
   pthread_cond_t condvar;
-  /* TODO: More stuff here, maybe? */
+  pthread_t* threads; // Array of thread IDs
+  int num_threads; // Number of threads
 } wq_t;
 
 void wq_init(wq_t* wq);
