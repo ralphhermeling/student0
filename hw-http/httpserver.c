@@ -174,8 +174,7 @@ void serve_directory(int fd, char* path) {
   size_t length = 0;
   size_t capacity = initial_capacity;
 
-  length += snprintf(buffer, capacity,
-                     "<html><head><title>Index of %s</title></head><body>", path);
+  length += snprintf(buffer, capacity, "<html><head><title>Index of %s</title></head><body>", path);
   length += snprintf(buffer + length, capacity - length, "<h1>Index of %s</h1><ul>", path);
 
   /* Buffer for each formatted href */
@@ -294,6 +293,44 @@ void handle_files_request(int fd) {
   return;
 }
 
+struct proxy_fd {
+  int from_fd;
+  int to_fd;
+  int* is_done;
+  pthread_mutex_t* done_mutex;
+};
+
+void* forward_bytes(void* arg) {
+  struct proxy_fd* fds = (struct proxy_fd*)arg;
+  char buffer[4096];
+
+  int should_shutdown = 0;
+
+  while (1) {
+    ssize_t bytes_read = read(fds->from_fd, buffer, sizeof(buffer));
+    if (bytes_read <= 0) {
+      should_shutdown = 1;
+      break;
+    }
+
+    ssize_t total_written = 0;
+    while (total_written < bytes_read) {
+      ssize_t bytes_written = write(fds->to_fd, buffer + total_written, bytes_read - total_written);
+      if (bytes_written <= 0) {
+        should_shutdown = 1;
+        break;
+      }
+      total_written += bytes_written;
+    }
+
+    if (should_shutdown) {
+      break;
+    }
+  }
+
+  return NULL;
+}
+
 /*
  * Opens a connection to the proxy target (hostname=server_proxy_hostname and
  * port=server_proxy_port) and relays traffic to/from the stream fd and the
@@ -308,7 +345,7 @@ void handle_files_request(int fd) {
  *   Closes client socket (fd) and proxy target fd (target_fd) when finished.
  */
 void handle_proxy_request(int fd) {
-
+  printf("Start handle_proxy_request\n");
   /*
   * The code below does a DNS lookup of server_proxy_hostname and
   * opens a connection to it. Please do not modify.
@@ -357,7 +394,61 @@ void handle_proxy_request(int fd) {
 
   /* TODO: PART 4 */
   /* PART 4 BEGIN */
+  printf("Setting up c2t and t2c fd structs \n");
+  struct proxy_fd* client_forward = malloc(sizeof(struct proxy_fd));
+  if (client_forward == NULL) {
+    /* Dummy request parsing, just to be compliant. */
+    http_request_parse(fd);
 
+    http_start_response(fd, 502);
+    http_send_header(fd, "Content-Type", "text/html");
+    http_end_headers(fd);
+    close(target_fd);
+    close(fd);
+    return;
+  }
+  struct proxy_fd* target_forward = malloc(sizeof(struct proxy_fd));
+  if (target_forward == NULL) {
+    /* Dummy request parsing, just to be compliant. */
+    http_request_parse(fd);
+
+    http_start_response(fd, 502);
+    http_send_header(fd, "Content-Type", "text/html");
+    http_end_headers(fd);
+    free(client_forward);
+    close(target_fd);
+    close(fd);
+    return;
+  }
+
+  int is_done_val = 0;
+  pthread_mutex_t is_done_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+  client_forward->from_fd = fd;
+  client_forward->to_fd = target_fd;
+  client_forward->done_mutex = &is_done_mutex;
+  client_forward->is_done = &is_done_val;
+
+  target_forward->from_fd = target_fd;
+  target_forward->to_fd = fd;
+  target_forward->done_mutex = &is_done_mutex;
+  target_forward->is_done = &is_done_val;
+
+  printf("Finished setting up c2t and t2c fd structs \n");
+  pthread_t thread_id_client_forward;
+  pthread_t thread_id_target_forward;
+
+  pthread_create(&thread_id_client_forward, NULL, forward_bytes, client_forward);
+  pthread_create(&thread_id_target_forward, NULL, forward_bytes, target_forward);
+
+  pthread_join(thread_id_client_forward, NULL);
+  pthread_join(thread_id_target_forward, NULL);
+
+  close(target_fd);
+  close(fd);
+
+  free(client_forward);
+  free(target_forward);
   /* PART 4 END */
 }
 
