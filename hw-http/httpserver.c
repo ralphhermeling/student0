@@ -304,12 +304,23 @@ void* forward_bytes(void* arg) {
   struct proxy_fd* fds = (struct proxy_fd*)arg;
   char buffer[4096];
 
-  int should_shutdown = 0;
-
   while (1) {
+    pthread_mutex_lock(fds->done_mutex);
+    if (*(fds->is_done)) {
+      pthread_mutex_unlock(fds->done_mutex);
+      break;
+    }
+    pthread_mutex_unlock(fds->done_mutex);
+
     ssize_t bytes_read = read(fds->from_fd, buffer, sizeof(buffer));
     if (bytes_read <= 0) {
-      should_shutdown = 1;
+      pthread_mutex_lock(fds->done_mutex);
+      if (*(fds->is_done) == 0) {
+        *(fds->is_done) = 1;
+        shutdown(fds->from_fd, SHUT_RDWR);
+        shutdown(fds->to_fd, SHUT_RDWR);
+      }
+      pthread_mutex_unlock(fds->done_mutex);
       break;
     }
 
@@ -317,14 +328,16 @@ void* forward_bytes(void* arg) {
     while (total_written < bytes_read) {
       ssize_t bytes_written = write(fds->to_fd, buffer + total_written, bytes_read - total_written);
       if (bytes_written <= 0) {
-        should_shutdown = 1;
+        pthread_mutex_lock(fds->done_mutex);
+        if (*(fds->is_done) == 0) {
+          *(fds->is_done) = 1;
+          shutdown(fds->from_fd, SHUT_RDWR);
+          shutdown(fds->to_fd, SHUT_RDWR);
+        }
+        pthread_mutex_unlock(fds->done_mutex);
         break;
       }
       total_written += bytes_written;
-    }
-
-    if (should_shutdown) {
-      break;
     }
   }
 
@@ -438,6 +451,7 @@ void handle_proxy_request(int fd) {
   pthread_t thread_id_client_forward;
   pthread_t thread_id_target_forward;
 
+  printf("Starting forwarding threads. \n");
   pthread_create(&thread_id_client_forward, NULL, forward_bytes, client_forward);
   pthread_create(&thread_id_target_forward, NULL, forward_bytes, target_forward);
 
