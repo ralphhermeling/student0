@@ -226,6 +226,7 @@ bool load(const char* file_name, void (**eip)(void), void** esp) {
   }
 
   /* Read program headers. */
+  struct Elf32_Phdr last_phdr;
   file_ofs = ehdr.e_phoff;
   for (i = 0; i < ehdr.e_phnum; i++) {
     struct Elf32_Phdr phdr;
@@ -256,6 +257,7 @@ bool load(const char* file_name, void (**eip)(void), void** esp) {
           uint32_t mem_page = phdr.p_vaddr & ~PGMASK;
           uint32_t page_offset = phdr.p_vaddr & PGMASK;
           uint32_t read_bytes, zero_bytes;
+          last_phdr = phdr;
           if (phdr.p_filesz > 0) {
             /* Normal segment.
                      Read initial part from disk and zero the rest. */
@@ -281,6 +283,10 @@ bool load(const char* file_name, void (**eip)(void), void** esp) {
 
   /* Start address. */
   *eip = (void (*)(void))ehdr.e_entry;
+
+  /* Initialize heap start and brk */
+  t->start_heap = (void *) ROUND_UP(last_phdr.p_vaddr + last_phdr.p_memsz, PGSIZE);
+  t->brk = t->start_heap;
 
   success = true;
 
