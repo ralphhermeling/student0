@@ -1,0 +1,71 @@
+🧾 httpserver (single-threaded)
+What happens as n and c grow large?
+
+The mean, median, and max durations remain low and stable up to moderate concurrency (c=100).
+
+At high concurrency (c=500), durations start to increase but not drastically.
+
+Best suited for low concurrency and small to moderate load.
+
+Why?
+
+It handles one request at a time. At high concurrency, requests wait in the backlog, increasing response times.
+
+🧾 forkserver (forks new process per request)
+What happens as n and c grow large?
+
+Shows steep increases in latency (especially max and mean) as concurrency increases.
+
+At c=500, durations spike significantly (e.g., mean time goes from 7 ms to 34 ms).
+
+Most sensitive to high concurrency.
+
+Why?
+
+Forking a process for every request is expensive in terms of system resources (memory, context switch, etc).
+
+The overhead compounds rapidly under load, making it the least efficient.
+
+Comparison to httpserver:
+
+Performs slightly better at low concurrency but collapses under high concurrency, whereas httpserver degrades more gradually.
+
+🧾 threadserver (spawns new thread per request)
+What happens as n and c grow large?
+
+Performance is more stable than forkserver, with a gradual rise in mean and median times.
+
+At c=500, mean times go up (e.g., 26–33 ms), but not as severely as forkserver.
+
+Why?
+
+Thread creation is cheaper than process creation, but there's still overhead.
+
+Also vulnerable to OS thread limits and scheduling delays as concurrency increases.
+
+Comparison:
+
+Outperforms forkserver at high concurrency.
+
+Slightly better than httpserver overall but not as efficient as poolserver.
+
+🧾 poolserver (thread pool)
+What happens as n and c grow large?
+
+The most efficient and stable of all.
+
+At c=500, durations rise but much less sharply than threadserver or forkserver.
+
+Handles high n and c better than any other model.
+
+Why?
+
+Thread pool reuses threads and avoids the overhead of creating a thread per request.
+
+Maintains low overhead and fast task dispatching, making it ideal for high concurrency workloads.
+
+Comparison:
+
+Significantly better scalability than all others.
+
+Best choice if expecting large traffic volume and high concurrency.

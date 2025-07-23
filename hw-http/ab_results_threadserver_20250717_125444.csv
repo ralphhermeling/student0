@@ -1,0 +1,16 @@
+server,n,c,min,mean,stddev,median,max
+threadserver,100,1,0,1,0.1,1,1
+threadserver,100,10,1,2,0.6,1,3
+threadserver,100,100,5,6,0.6,6,6
+threadserver,500,1,0,0,0.0,0,0
+threadserver,500,10,0,1,0.1,1,1
+threadserver,500,100,3,6,0.9,6,9
+threadserver,500,500,13,23,2.1,23,27
+threadserver,1000,1,0,0,0.0,0,1
+threadserver,1000,10,0,1,0.0,1,1
+threadserver,1000,100,2,6,0.7,6,8
+threadserver,1000,500,18,26,4.2,27,32
+threadserver,2000,1,0,0,0.0,0,1
+threadserver,2000,10,0,1,0.1,1,1
+threadserver,2000,100,3,6,0.7,6,9
+threadserver,2000,500,19,33,4.3,33,48

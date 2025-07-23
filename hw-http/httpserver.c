@@ -475,7 +475,7 @@ void* handle_clients(void* void_request_handler) {
   /* TODO: PART 7 */
   /* PART 7 BEGIN */
   int client_socket_number;
-  while((client_socket_number = wq_pop(&work_queue))){
+  while ((client_socket_number = wq_pop(&work_queue))) {
     request_handler(client_socket_number);
   }
   return NULL;
@@ -492,12 +492,12 @@ void init_thread_pool(int num_threads, void (*request_handler)(int)) {
   wq_init(&work_queue);
   work_queue.num_threads = num_threads;
   work_queue.threads = malloc(sizeof(pthread_t) * num_threads);
-  if(work_queue.threads == NULL){
+  if (work_queue.threads == NULL) {
     perror("Failed to allocate thread pool");
     exit(1);
   }
-  
-  for(size_t i = 0; i < num_threads; i++){
+
+  for (size_t i = 0; i < num_threads; i++) {
     pthread_create(&work_queue.threads[i], NULL, handle_clients, request_handler);
   }
 
@@ -514,6 +514,9 @@ void* handle_request_thread(void* arg) {
   struct thread_request_handler* h = (struct thread_request_handler*)arg;
   h->request_handler(h->client_socket);
   free(h);
+
+  shutdown(h->client_socket, SHUT_RDWR);
+  close(h->client_socket);
   return NULL;
 }
 
@@ -625,8 +628,9 @@ void serve_forever(int* socket_number, void (*request_handler)(int)) {
       shutdown(client_socket_number, SHUT_RDWR);
       close(client_socket_number);
       exit(0);
+    } else {
+      close(client_socket_number);
     }
-
     /* PART 5 END */
 
 #elif THREADSERVER

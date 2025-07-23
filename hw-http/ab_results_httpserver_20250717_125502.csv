@@ -1,0 +1,16 @@
+server,n,c,min,mean,stddev,median,max
+httpserver,100,1,0,0,0.1,0,1
+httpserver,100,10,1,1,0.1,1,1
+httpserver,100,100,4,8,2.0,8,11
+httpserver,500,1,0,0,0.0,0,0
+httpserver,500,10,0,1,0.1,0,1
+httpserver,500,100,3,5,0.7,5,6
+httpserver,500,500,11,20,4.4,19,28
+httpserver,1000,1,0,0,0.0,0,0
+httpserver,1000,10,0,1,0.0,1,1
+httpserver,1000,100,2,5,0.7,5,7
+httpserver,1000,500,12,23,4.1,24,27
+httpserver,2000,1,0,0,0.0,0,0
+httpserver,2000,10,0,1,0.0,1,1
+httpserver,2000,100,2,5,0.4,5,6
+httpserver,2000,500,11,26,4.7,27,34
