@@ -65,7 +65,7 @@ static void* syscall_sbrk(intptr_t increment) {
       void* kpages = palloc_get_multiple(PAL_USER | PAL_ZERO, pages_to_alloc);
       if (!kpages) {
         /* Out of memory do not move brk, return -1 */
-        printf("[sbrk] Out of memory");
+        // printf("[sbrk] Out of memory");
         return (void*)-1;
       }
       /* Map pages into virtual address space */
@@ -73,7 +73,7 @@ static void* syscall_sbrk(intptr_t increment) {
         void* upage = old_pg_aligned + i * PGSIZE;
         void* kpage = kpages + i * PGSIZE;
         if (!install_page(upage, kpage, true)) {
-          printf("[sbrk] Memory mapping failed");
+          // printf("[sbrk] Memory mapping failed");
           palloc_free_multiple(kpages, pages_to_alloc);
           return (void*)-1;
         }
