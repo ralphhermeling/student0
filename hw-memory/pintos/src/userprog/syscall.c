@@ -53,29 +53,33 @@ static void* syscall_sbrk(intptr_t increment) {
   void* new_pg_aligned = pg_round_down(new_brk);
 
   if (increment > 0) {
-    size_t pages_to_alloc = pg_no(new_pg_aligned) - pg_no(old_pg_aligned);
+    size_t pages_to_alloc = pg_no(new_pg_aligned) - pg_no(old_pg_aligned) + 1;
 
     if (cur->brk == cur->start_heap && pages_to_alloc == 0) {
       pages_to_alloc = 1;
     }
 
+    // printf("[sbrk] increment=%d old=%p new=%p pages=%zu\n", increment, old_brk, new_brk,
+    //        pages_to_alloc);
     if (pages_to_alloc > 0) {
       void* kpages = palloc_get_multiple(PAL_USER | PAL_ZERO, pages_to_alloc);
       if (!kpages) {
         /* Out of memory do not move brk, return -1 */
+        printf("[sbrk] Out of memory");
         return (void*)-1;
       }
-
       /* Map pages into virtual address space */
       for (size_t i = 0; i < pages_to_alloc; i++) {
         void* upage = old_pg_aligned + i * PGSIZE;
         void* kpage = kpages + i * PGSIZE;
         if (!install_page(upage, kpage, true)) {
+          printf("[sbrk] Memory mapping failed");
           palloc_free_multiple(kpages, pages_to_alloc);
           return (void*)-1;
         }
       }
     }
+    // printf("[sbrk] successfully allocated pages=%zu\n", pages_to_alloc);
 
   } else {
     if (new_pg_aligned < old_pg_aligned) {
