@@ -49,33 +49,42 @@ static void* syscall_sbrk(intptr_t increment) {
 
   void* new_brk = old_brk + increment;
 
-  uintptr_t old_pg = pg_no(pg_round_down(old_brk));
-  uintptr_t new_pg = pg_no(pg_round_down(new_brk));
+  void* old_pg_aligned = pg_round_down(old_brk);
+  void* new_pg_aligned = pg_round_down(new_brk);
 
-  if (new_pg > old_pg) {
-    size_t pages_to_alloc = new_pg - old_pg;
-    void* kpages = palloc_get_multiple(PAL_USER | PAL_ZERO, pages_to_alloc);
-    if (!kpages) {
-      /* Out of memory do not move brk, return -1 */
-      return (void*)-1;
+  if (increment > 0) {
+    size_t pages_to_alloc = pg_no(new_pg_aligned) - pg_no(old_pg_aligned);
+
+    if (cur->brk == cur->start_heap && pages_to_alloc == 0) {
+      pages_to_alloc = 1;
     }
 
-    /* Map pages into virtual address space */
-    for (size_t i = 0; i < pages_to_alloc; i++) {
-      void* upage = pg_round_down(old_brk) + (i + 1) * PGSIZE;
-      void* kpage = kpages + i * PGSIZE;
-      if (!install_page(upage, kpage, true)) {
-        palloc_free_multiple(kpages, pages_to_alloc);
+    if (pages_to_alloc > 0) {
+      void* kpages = palloc_get_multiple(PAL_USER | PAL_ZERO, pages_to_alloc);
+      if (!kpages) {
+        /* Out of memory do not move brk, return -1 */
         return (void*)-1;
       }
-    }
-  } else if(new_pg > old_pg){
-    void* free_start = pg_round_up(old_brk);
-    void* free_end = pg_round_down(new_brk);
 
-    if(free_start < free_end){
-      size_t pages_to_free = (pg_no(free_end) - pg_no(free_start));
-      palloc_free_multiple(free_start, pages_to_free);
+      /* Map pages into virtual address space */
+      for (size_t i = 0; i < pages_to_alloc; i++) {
+        void* upage = old_pg_aligned + i * PGSIZE;
+        void* kpage = kpages + i * PGSIZE;
+        if (!install_page(upage, kpage, true)) {
+          palloc_free_multiple(kpages, pages_to_alloc);
+          return (void*)-1;
+        }
+      }
+    }
+
+  } else {
+    if (new_pg_aligned < old_pg_aligned) {
+      void* free_start = pg_round_up(new_brk);
+      size_t pages_to_free = (pg_no(old_pg_aligned) - pg_no(free_start));
+
+      if (pages_to_free > 0) {
+        palloc_free_multiple(free_start, pages_to_free);
+      }
     }
   }
 
@@ -179,7 +188,7 @@ static void syscall_handler(struct intr_frame* f) {
 
     case SYS_SBRK:
       validate_buffer_in_user_region(&args[1], sizeof(uint32_t));
-      f->eax = (uint32_t) syscall_sbrk((intptr_t)args[1]);
+      f->eax = (uint32_t)syscall_sbrk((intptr_t)args[1]);
       break;
 
     default:

@@ -2,6 +2,7 @@
 #include <debug.h>
 #include <inttypes.h>
 #include <round.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -226,7 +227,7 @@ bool load(const char* file_name, void (**eip)(void), void** esp) {
   }
 
   /* Read program headers. */
-  struct Elf32_Phdr last_phdr;
+  uintptr_t highest_end = 0;
   file_ofs = ehdr.e_phoff;
   for (i = 0; i < ehdr.e_phnum; i++) {
     struct Elf32_Phdr phdr;
@@ -257,7 +258,6 @@ bool load(const char* file_name, void (**eip)(void), void** esp) {
           uint32_t mem_page = phdr.p_vaddr & ~PGMASK;
           uint32_t page_offset = phdr.p_vaddr & PGMASK;
           uint32_t read_bytes, zero_bytes;
-          last_phdr = phdr;
           if (phdr.p_filesz > 0) {
             /* Normal segment.
                      Read initial part from disk and zero the rest. */
@@ -269,6 +269,11 @@ bool load(const char* file_name, void (**eip)(void), void** esp) {
             read_bytes = 0;
             zero_bytes = ROUND_UP(page_offset + phdr.p_memsz, PGSIZE);
           }
+          uintptr_t seg_end = phdr.p_vaddr + phdr.p_memsz;
+          if (seg_end > highest_end) {
+            highest_end = seg_end;
+          }
+
           if (!load_segment(file, file_page, (void*)mem_page, read_bytes, zero_bytes, writable))
             goto done;
         } else
@@ -285,7 +290,7 @@ bool load(const char* file_name, void (**eip)(void), void** esp) {
   *eip = (void (*)(void))ehdr.e_entry;
 
   /* Initialize heap start and brk */
-  t->start_heap = (void *) ROUND_UP(last_phdr.p_vaddr + last_phdr.p_memsz, PGSIZE);
+  t->start_heap = (void*)ROUND_UP(highest_end, PGSIZE);
   t->brk = t->start_heap;
 
   success = true;

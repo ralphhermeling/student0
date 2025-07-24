@@ -1,4 +1,5 @@
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <syscall.h>
 #include "../syscall-nr.h"
@@ -53,6 +54,16 @@
     retval;                                                                                        \
   })
 
+#define syscall1_ptr(NUMBER, ARG0)                                                                 \
+  ({                                                                                               \
+    uintptr_t retval;                                                                              \
+    asm volatile("pushl %[arg0]; pushl %[number]; int $0x30; addl $8, %%esp"                       \
+                 : "=a"(retval)                                                                    \
+                 : [number] "i"(NUMBER), [arg0] "g"(ARG0)                                          \
+                 : "memory");                                                                      \
+    (void*)retval;                                                                                 \
+  })
+
 int practice(int i) { return syscall1(SYS_PRACTICE, i); }
 
 void halt(void) {
@@ -105,4 +116,4 @@ bool isdir(int fd) { return syscall1(SYS_ISDIR, fd); }
 
 int inumber(int fd) { return syscall1(SYS_INUMBER, fd); }
 
-void* sbrk(intptr_t increment) { return (void*)syscall1(SYS_SBRK, increment); }
+void* sbrk(intptr_t increment) { return syscall1_ptr(SYS_SBRK, increment); }
