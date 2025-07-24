@@ -1,4 +1,5 @@
 #include "userprog/syscall.h"
+#include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -82,12 +83,33 @@ static void* syscall_sbrk(intptr_t increment) {
     // printf("[sbrk] successfully allocated pages=%zu\n", pages_to_alloc);
 
   } else {
-    if (new_pg_aligned < old_pg_aligned) {
+    // printf("[sbrk] increment:%d; new_pg_aligned:%p; old_pg_aligned:%p; new_brk:%p; old_brk:%p\n", increment, new_pg_aligned,
+           // old_pg_aligned, new_brk, old_brk);
+    if (new_brk < old_brk) {
       void* free_start = pg_round_up(new_brk);
-      size_t pages_to_free = (pg_no(old_pg_aligned) - pg_no(free_start));
+      void* free_end = pg_round_down(old_brk);
 
-      if (pages_to_free > 0) {
-        palloc_free_multiple(free_start, pages_to_free);
+      // printf("[sbrk] free_start:%p; free_end:%p\n", free_start, free_end);
+      if (free_start <= free_end) {
+        size_t pages_to_free = pg_no(free_end) - pg_no(free_start) + 1;
+
+        // printf("[sbrk] pages_to_free:%d\n", pages_to_free);
+
+        // void* upage = free_start;
+        // void* kpage = pagedir_get_page(cur->pagedir, upage);
+        // printf("[sbrk] memory is mapped %d \n", kpage != NULL);
+        // pagedir_clear_page(cur->pagedir, upage);
+        // palloc_free_page(kpage);
+
+        for (size_t i = 0; i < pages_to_free; i++) {
+          void* upage = free_start + i * PGSIZE;
+          // Get the kernel address mapped to this upage
+          void* kpage = pagedir_get_page(cur->pagedir, upage);
+          if (kpage != NULL) {
+            pagedir_clear_page(cur->pagedir, upage);
+            palloc_free_page(kpage); // Free the physical page
+          }
+          }
       }
     }
   }
