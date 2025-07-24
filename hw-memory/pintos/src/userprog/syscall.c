@@ -3,13 +3,11 @@
 #include <stdio.h>
 #include <string.h>
 #include <syscall-nr.h>
-#include "round.h"
 #include "stdbool.h"
 #include "threads/interrupt.h"
 #include "threads/palloc.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
-#include "threads/malloc.h"
 #include "filesys/filesys.h"
 #include "filesys/file.h"
 #include "userprog/pagedir.h"
@@ -181,7 +179,7 @@ static void syscall_handler(struct intr_frame* f) {
 
     case SYS_SBRK:
       validate_buffer_in_user_region(&args[1], sizeof(uint32_t));
-      syscall_sbrk((intptr_t)args[1]);
+      f->eax = (uint32_t) syscall_sbrk((intptr_t)args[1]);
       break;
 
     default:
