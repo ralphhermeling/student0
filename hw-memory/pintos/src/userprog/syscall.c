@@ -1,12 +1,18 @@
 #include "userprog/syscall.h"
+#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 #include <syscall-nr.h>
+#include "round.h"
+#include "stdbool.h"
 #include "threads/interrupt.h"
+#include "threads/palloc.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
+#include "threads/malloc.h"
 #include "filesys/filesys.h"
 #include "filesys/file.h"
+#include "userprog/pagedir.h"
 
 static void syscall_handler(struct intr_frame*);
 
@@ -15,6 +21,62 @@ void syscall_init(void) { intr_register_int(0x30, 3, INTR_ON, syscall_handler, "
 void syscall_exit(int status) {
   printf("%s: exit(%d)\n", thread_current()->name, status);
   thread_exit();
+}
+
+/* Adds a mapping from user virtual address UPAGE to kernel
+   virtual address KPAGE to the page table.
+   If WRITABLE is true, the user process may modify the page;
+   otherwise, it is read-only.
+   UPAGE must not already be mapped.
+   KPAGE should probably be a page obtained from the user pool
+   with palloc_get_page().
+   Returns true on success, false if UPAGE is already mapped or
+   if memory allocation fails. */
+static bool install_page(void* upage, void* kpage, bool writable) {
+  struct thread* t = thread_current();
+
+  /* Verify that there's not already a page at that virtual
+     address, then map our page there. */
+  return (pagedir_get_page(t->pagedir, upage) == NULL &&
+          pagedir_set_page(t->pagedir, upage, kpage, writable));
+}
+
+static void* syscall_sbrk(intptr_t increment) {
+  struct thread* cur = thread_current();
+  void* old_brk = cur->brk;
+
+  if (increment == 0) {
+    return old_brk;
+  }
+
+  void* new_brk = old_brk + increment;
+
+  uintptr_t old_pg = pg_no(pg_round_down(old_brk));
+  uintptr_t new_pg = pg_no(pg_round_down(new_brk));
+
+  if (new_pg > old_pg) {
+    size_t pages_to_alloc = new_pg - old_pg;
+    void* kpages = palloc_get_multiple(PAL_USER | PAL_ZERO, pages_to_alloc);
+    if (!kpages) {
+      /* Out of memory do not move brk, return -1 */
+      return (void*)-1;
+    }
+
+    /* Map pages into virtual address space */
+    for (size_t i = 0; i < pages_to_alloc; i++) {
+      void* upage = pg_round_down(old_brk) + (i + 1) * PGSIZE;
+      void* kpage = kpages + i * PGSIZE;
+      if (!install_page(upage, kpage, true)) {
+        palloc_free_multiple(kpages, pages_to_alloc);
+        return (void*)-1;
+      }
+    }
+  } else if(new_pg > old_pg){
+
+  }
+
+  cur->brk = new_brk;
+  return old_brk;
 }
 
 /*
@@ -109,6 +171,11 @@ static void syscall_handler(struct intr_frame* f) {
     case SYS_CLOSE:
       validate_buffer_in_user_region(&args[1], sizeof(uint32_t));
       syscall_close((int)args[1]);
+      break;
+
+    case SYS_SBRK:
+      validate_buffer_in_user_region(&args[1], sizeof(uint32_t));
+      syscall_sbrk((intptr_t)args[1]);
       break;
 
     default:
