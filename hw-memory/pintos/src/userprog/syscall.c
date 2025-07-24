@@ -72,7 +72,13 @@ static void* syscall_sbrk(intptr_t increment) {
       }
     }
   } else if(new_pg > old_pg){
+    void* free_start = pg_round_up(old_brk);
+    void* free_end = pg_round_down(new_brk);
 
+    if(free_start < free_end){
+      size_t pages_to_free = (pg_no(free_end) - pg_no(free_start));
+      palloc_free_multiple(free_start, pages_to_free);
+    }
   }
 
   cur->brk = new_brk;
