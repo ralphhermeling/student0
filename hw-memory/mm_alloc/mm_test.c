@@ -2,6 +2,8 @@
 #include <dlfcn.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+#include <stdint.h>
 
 /* Function pointers to hw3 functions */
 void* (*mm_malloc)(size_t);
@@ -30,12 +32,284 @@ static void load_alloc_functions() {
   mm_free = try_dlsym(handle, "mm_free");
 }
 
+void test_basic_malloc_free() {
+  printf("Running basic malloc/free tests...\n");
+  
+  // Test small allocation
+  void* ptr1 = mm_malloc(16);
+  assert(ptr1 != NULL);
+  mm_free(ptr1);
+  
+  // Test medium allocation
+  void* ptr2 = mm_malloc(1024);
+  assert(ptr2 != NULL);
+  mm_free(ptr2);
+  
+  // Test large allocation
+  void* ptr3 = mm_malloc(65536);
+  assert(ptr3 != NULL);
+  mm_free(ptr3);
+  
+  printf("Basic malloc/free tests passed!\n");
+}
+
+void test_basic_realloc() {
+  printf("Running basic realloc tests...\n");
+  
+  // Test expanding realloc
+  void* ptr = mm_malloc(100);
+  assert(ptr != NULL);
+  strcpy((char*)ptr, "test data");
+  
+  ptr = mm_realloc(ptr, 200);
+  assert(ptr != NULL);
+  assert(strcmp((char*)ptr, "test data") == 0);
+  
+  // Test shrinking realloc
+  ptr = mm_realloc(ptr, 50);
+  assert(ptr != NULL);
+  assert(strncmp((char*)ptr, "test data", 9) == 0);
+  
+  // Test same size realloc
+  ptr = mm_realloc(ptr, 50);
+  assert(ptr != NULL);
+  
+  mm_free(ptr);
+  printf("Basic realloc tests passed!\n");
+}
+
+void test_edge_cases() {
+  printf("Running edge case tests...\n");
+  
+  // Test zero size malloc
+  void* ptr1 = mm_malloc(0);
+  // Should either return NULL or a valid pointer that can be freed
+  mm_free(ptr1);
+  
+  // Test NULL pointer free (should not crash)
+  mm_free(NULL);
+  
+  // Test realloc with NULL pointer (should behave like malloc)
+  void* ptr2 = mm_realloc(NULL, 100);
+  assert(ptr2 != NULL);
+  mm_free(ptr2);
+  
+  // Test realloc with zero size (should behave like free)
+  void* ptr3 = mm_malloc(100);
+  assert(ptr3 != NULL);
+  ptr3 = mm_realloc(ptr3, 0);
+  // ptr3 should now be either NULL or a pointer that can be freed
+  mm_free(ptr3);
+  
+  printf("Edge case tests passed!\n");
+}
+
+void test_memory_integrity() {
+  printf("Running memory integrity tests...\n");
+  
+  // Test data preservation
+  int* data = (int*)mm_malloc(sizeof(int) * 10);
+  assert(data != NULL);
+  
+  for (int i = 0; i < 10; i++) {
+    data[i] = i * i;
+  }
+  
+  for (int i = 0; i < 10; i++) {
+    assert(data[i] == i * i);
+  }
+  
+  mm_free(data);
+  
+  // Test realloc data preservation
+  char* str = (char*)mm_malloc(20);
+  assert(str != NULL);
+  strcpy(str, "Hello World");
+  
+  str = (char*)mm_realloc(str, 100);
+  assert(str != NULL);
+  assert(strcmp(str, "Hello World") == 0);
+  
+  mm_free(str);
+  
+  // Test alignment
+  void* ptr1 = mm_malloc(1);
+  void* ptr2 = mm_malloc(1);
+  assert(ptr1 != NULL && ptr2 != NULL);
+  assert(((uintptr_t)ptr1 % sizeof(void*)) == 0);
+  assert(((uintptr_t)ptr2 % sizeof(void*)) == 0);
+  mm_free(ptr1);
+  mm_free(ptr2);
+  
+  printf("Memory integrity tests passed!\n");
+}
+
+void test_memory_mapping() {
+  printf("Running memory mapping verification tests...\n");
+  
+  // Test that all bytes in allocated memory are readable and writable
+  size_t test_sizes[] = {1, 8, 16, 64, 256, 1024, 4096, 65536};
+  size_t num_sizes = sizeof(test_sizes) / sizeof(test_sizes[0]);
+  
+  for (size_t i = 0; i < num_sizes; i++) {
+    size_t size = test_sizes[i];
+    unsigned char* ptr = (unsigned char*)mm_malloc(size);
+    assert(ptr != NULL);
+    
+    // Write a pattern to every byte
+    for (size_t j = 0; j < size; j++) {
+      ptr[j] = (unsigned char)(j % 256);
+    }
+    
+    // Read back and verify every byte
+    for (size_t j = 0; j < size; j++) {
+      assert(ptr[j] == (unsigned char)(j % 256));
+    }
+    
+    // Write a different pattern
+    for (size_t j = 0; j < size; j++) {
+      ptr[j] = (unsigned char)((255 - j) % 256);
+    }
+    
+    // Verify the new pattern
+    for (size_t j = 0; j < size; j++) {
+      assert(ptr[j] == (unsigned char)((255 - j) % 256));
+    }
+    
+    mm_free(ptr);
+  }
+  
+  // Test that realloc preserves memory mapping
+  unsigned char* realloc_ptr = (unsigned char*)mm_malloc(1000);
+  assert(realloc_ptr != NULL);
+  
+  // Fill with pattern
+  for (size_t i = 0; i < 1000; i++) {
+    realloc_ptr[i] = (unsigned char)(i % 256);
+  }
+  
+  // Expand and verify old data is still accessible
+  realloc_ptr = (unsigned char*)mm_realloc(realloc_ptr, 2000);
+  assert(realloc_ptr != NULL);
+  
+  for (size_t i = 0; i < 1000; i++) {
+    assert(realloc_ptr[i] == (unsigned char)(i % 256));
+  }
+  
+  // Write to new region
+  for (size_t i = 1000; i < 2000; i++) {
+    realloc_ptr[i] = (unsigned char)((i + 100) % 256);
+  }
+  
+  // Verify all data is accessible
+  for (size_t i = 0; i < 1000; i++) {
+    assert(realloc_ptr[i] == (unsigned char)(i % 256));
+  }
+  for (size_t i = 1000; i < 2000; i++) {
+    assert(realloc_ptr[i] == (unsigned char)((i + 100) % 256));
+  }
+  
+  mm_free(realloc_ptr);
+  
+  // Test boundary access (first and last byte of allocation)
+  size_t boundary_size = 10000;
+  unsigned char* boundary_ptr = (unsigned char*)mm_malloc(boundary_size);
+  assert(boundary_ptr != NULL);
+  
+  // Write to first byte
+  boundary_ptr[0] = 0xAB;
+  assert(boundary_ptr[0] == 0xAB);
+  
+  // Write to last byte
+  boundary_ptr[boundary_size - 1] = 0xCD;
+  assert(boundary_ptr[boundary_size - 1] == 0xCD);
+  
+  // Write to middle bytes
+  for (size_t i = 1; i < boundary_size - 1; i++) {
+    boundary_ptr[i] = (unsigned char)(i % 256);
+  }
+  
+  // Verify all bytes
+  assert(boundary_ptr[0] == 0xAB);
+  assert(boundary_ptr[boundary_size - 1] == 0xCD);
+  for (size_t i = 1; i < boundary_size - 1; i++) {
+    assert(boundary_ptr[i] == (unsigned char)(i % 256));
+  }
+  
+  mm_free(boundary_ptr);
+  
+  printf("Memory mapping verification tests passed!\n");
+}
+
+void test_stress() {
+  printf("Running stress tests...\n");
+  
+  // Test multiple allocations
+  void* ptrs[100];
+  for (int i = 0; i < 100; i++) {
+    ptrs[i] = mm_malloc((i + 1) * 10);
+    assert(ptrs[i] != NULL);
+  }
+  
+  for (int i = 0; i < 100; i++) {
+    mm_free(ptrs[i]);
+  }
+  
+  // Test fragmentation pattern
+  void* frag_ptrs[50];
+  for (int i = 0; i < 50; i++) {
+    frag_ptrs[i] = mm_malloc(100);
+    assert(frag_ptrs[i] != NULL);
+  }
+  
+  // Free every other block
+  for (int i = 0; i < 50; i += 2) {
+    mm_free(frag_ptrs[i]);
+  }
+  
+  // Try to allocate in the gaps
+  for (int i = 0; i < 25; i++) {
+    void* gap_ptr = mm_malloc(50);
+    assert(gap_ptr != NULL);
+    mm_free(gap_ptr);
+  }
+  
+  // Free remaining blocks
+  for (int i = 1; i < 50; i += 2) {
+    mm_free(frag_ptrs[i]);
+  }
+  
+  // Test mixed operations
+  void* mixed_ptrs[20];
+  for (int i = 0; i < 10; i++) {
+    mixed_ptrs[i] = mm_malloc(100 + i * 50);
+    assert(mixed_ptrs[i] != NULL);
+  }
+  
+  for (int i = 0; i < 5; i++) {
+    mixed_ptrs[i] = mm_realloc(mixed_ptrs[i], 200 + i * 100);
+    assert(mixed_ptrs[i] != NULL);
+  }
+  
+  for (int i = 0; i < 10; i++) {
+    mm_free(mixed_ptrs[i]);
+  }
+  
+  printf("Stress tests passed!\n");
+}
+
 int main() {
   load_alloc_functions();
-
-  int* data = mm_malloc(sizeof(int));
-  assert(data != NULL);
-  data[0] = 0x162;
-  mm_free(data);
-  puts("malloc test successful!");
+  
+  printf("Starting comprehensive memory allocator tests...\n\n");
+  
+  test_basic_malloc_free();
+  test_basic_realloc();
+  test_edge_cases();
+  test_memory_integrity();
+  test_memory_mapping();
+  test_stress();
+  
+  printf("\nAll tests passed successfully!\n");
+  return 0;
 }
