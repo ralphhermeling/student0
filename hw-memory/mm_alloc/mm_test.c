@@ -298,18 +298,55 @@ void test_stress() {
   printf("Stress tests passed!\n");
 }
 
-int main() {
+void print_usage(const char* program_name) {
+  printf("Usage: %s [test_name]\n", program_name);
+  printf("Available tests:\n");
+  printf("  basic_malloc_free  - Basic malloc/free functionality\n");
+  printf("  basic_realloc      - Basic realloc functionality\n");
+  printf("  edge_cases         - Edge case testing\n");
+  printf("  memory_integrity   - Memory integrity verification\n");
+  printf("  memory_mapping     - Memory mapping verification\n");
+  printf("  stress             - Stress testing\n");
+  printf("  all                - Run all tests (default)\n");
+}
+
+int main(int argc, char* argv[]) {
   load_alloc_functions();
   
-  printf("Starting comprehensive memory allocator tests...\n\n");
+  const char* test_name = (argc > 1) ? argv[1] : "all";
   
-  test_basic_malloc_free();
-  test_basic_realloc();
-  test_edge_cases();
-  test_memory_integrity();
-  test_memory_mapping();
-  test_stress();
+  if (strcmp(test_name, "help") == 0 || strcmp(test_name, "-h") == 0 || strcmp(test_name, "--help") == 0) {
+    print_usage(argv[0]);
+    return 0;
+  }
   
-  printf("\nAll tests passed successfully!\n");
+  printf("Running memory allocator tests...\n\n");
+  
+  if (strcmp(test_name, "basic_malloc_free") == 0) {
+    test_basic_malloc_free();
+  } else if (strcmp(test_name, "basic_realloc") == 0) {
+    test_basic_realloc();
+  } else if (strcmp(test_name, "edge_cases") == 0) {
+    test_edge_cases();
+  } else if (strcmp(test_name, "memory_integrity") == 0) {
+    test_memory_integrity();
+  } else if (strcmp(test_name, "memory_mapping") == 0) {
+    test_memory_mapping();
+  } else if (strcmp(test_name, "stress") == 0) {
+    test_stress();
+  } else if (strcmp(test_name, "all") == 0) {
+    test_basic_malloc_free();
+    test_basic_realloc();
+    test_edge_cases();
+    test_memory_integrity();
+    test_memory_mapping();
+    test_stress();
+  } else {
+    printf("Unknown test: %s\n\n", test_name);
+    print_usage(argv[0]);
+    return 1;
+  }
+  
+  printf("\nTest(s) completed successfully!\n");
   return 0;
 }

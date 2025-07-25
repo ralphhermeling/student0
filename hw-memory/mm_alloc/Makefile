@@ -13,5 +13,8 @@ mm_alloc.o: mm_alloc.c
 mm_test: mm_test.c
 	gcc $(CFLAGS) $(TEST_CFLAGS) -o $@ $^ $(TEST_LDFLAGS)
 
+test: mm_test
+	./mm_test $(TEST_NAME)
+
 clean:
 	rm -rf hw3lib.so mm_alloc.o mm_test
