@@ -5,6 +5,7 @@
 #include "mm_alloc.h"
 
 #include <assert.h>
+#include <stddef.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <stdio.h>
@@ -71,7 +72,7 @@ void* mm_malloc(size_t size) {
 
     /* Curr should be populated with address of last visited block */
     mm_md* tail = prev;
-    if(tail != NULL){
+    if (tail != NULL) {
       tail->next = new_block;
       new_block->prev = tail;
     }
@@ -126,8 +127,51 @@ void* mm_realloc(void* ptr, size_t size) {
 }
 
 void mm_free(void* ptr) {
-  //TODO: Implement free
-  if (ptr != NULL) {
+  if (ptr == NULL) {
     return;
   }
+
+  mm_md* block = (mm_md*)((char*)ptr - offsetof(mm_md, memory_block));
+  /* Knowning heap consists of mm_md blocks block should exist */
+  assert(block != NULL);
+
+  block->free = true;
+
+  /* Coalesce consecutive blocks in both directions */
+  mm_md* curr = block;
+  while (curr != NULL) {
+    if (curr->next != NULL && curr->next->free) {
+      /* Coalesce */
+      mm_md* next = curr->next;
+      size_t added_space = sizeof(mm_md) + next->size;
+      
+      curr->next = next->next;
+      if(next->next){
+        next->next->prev = curr;
+      }
+
+      curr->size += added_space;
+    } else {
+      /* Only coalesce consecutive blocks, terminate early */
+      break;
+    }
+    curr = curr->next;
+  }
+
+  curr = block;
+  while(curr != NULL){
+    if(curr->prev != NULL && curr->prev->free){
+      mm_md* prev = curr->prev;
+      size_t added_space = sizeof(mm_md) + prev->size;
+
+      curr->prev = prev->prev;
+      if(prev->prev){
+        prev->prev->next = curr;
+      }
+
+      curr->size += added_space;
+    }
+  }
+
+  return;
 }
