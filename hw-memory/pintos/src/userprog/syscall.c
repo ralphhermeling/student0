@@ -56,8 +56,8 @@ static void* syscall_sbrk(intptr_t increment) {
   if (increment > 0) {
     size_t pages_to_alloc = pg_no(new_pg_aligned) - pg_no(old_pg_aligned);
 
-    if (cur->brk == cur->start_heap && pages_to_alloc == 0) {
-      pages_to_alloc = 1;
+    if (cur->brk == cur->start_heap) {
+      pages_to_alloc += 1;
     }
 
     // printf("[sbrk] start_heap:%p; increment=%d old=%p new=%p pages=%zu\n", cur->start_heap,
