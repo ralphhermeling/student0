@@ -54,14 +54,14 @@ static void* syscall_sbrk(intptr_t increment) {
   void* new_pg_aligned = pg_round_down(new_brk);
 
   if (increment > 0) {
-    size_t pages_to_alloc = pg_no(new_pg_aligned) - pg_no(old_pg_aligned) + 1;
+    size_t pages_to_alloc = pg_no(new_pg_aligned) - pg_no(old_pg_aligned);
 
     if (cur->brk == cur->start_heap && pages_to_alloc == 0) {
       pages_to_alloc = 1;
     }
 
-    // printf("[sbrk] increment=%d old=%p new=%p pages=%zu\n", increment, old_brk, new_brk,
-    //        pages_to_alloc);
+    // printf("[sbrk] start_heap:%p; increment=%d old=%p new=%p pages=%zu\n", cur->start_heap,
+    //        increment, old_brk, new_brk, pages_to_alloc);
     if (pages_to_alloc > 0) {
       void* kpages = palloc_get_multiple(PAL_USER | PAL_ZERO, pages_to_alloc);
       if (!kpages) {
@@ -70,21 +70,23 @@ static void* syscall_sbrk(intptr_t increment) {
         return (void*)-1;
       }
       /* Map pages into virtual address space */
+      void* first_unmapped_upage = pg_round_up(old_brk);
       for (size_t i = 0; i < pages_to_alloc; i++) {
-        void* upage = old_pg_aligned + i * PGSIZE;
+        void* upage = first_unmapped_upage + i * PGSIZE;
         void* kpage = kpages + i * PGSIZE;
         if (!install_page(upage, kpage, true)) {
           // printf("[sbrk] Memory mapping failed");
           palloc_free_multiple(kpages, pages_to_alloc);
           return (void*)-1;
         }
+        // printf("[sbrk] successfully install upage:%p; kpage:%p\n", upage, kpage);
       }
     }
     // printf("[sbrk] successfully allocated pages=%zu\n", pages_to_alloc);
 
   } else {
     // printf("[sbrk] increment:%d; new_pg_aligned:%p; old_pg_aligned:%p; new_brk:%p; old_brk:%p\n", increment, new_pg_aligned,
-           // old_pg_aligned, new_brk, old_brk);
+    // old_pg_aligned, new_brk, old_brk);
     if (new_brk < old_brk) {
       void* free_start = pg_round_up(new_brk);
       void* free_end = pg_round_down(old_brk);
@@ -92,14 +94,7 @@ static void* syscall_sbrk(intptr_t increment) {
       // printf("[sbrk] free_start:%p; free_end:%p\n", free_start, free_end);
       if (free_start <= free_end) {
         size_t pages_to_free = pg_no(free_end) - pg_no(free_start) + 1;
-
         // printf("[sbrk] pages_to_free:%d\n", pages_to_free);
-
-        // void* upage = free_start;
-        // void* kpage = pagedir_get_page(cur->pagedir, upage);
-        // printf("[sbrk] memory is mapped %d \n", kpage != NULL);
-        // pagedir_clear_page(cur->pagedir, upage);
-        // palloc_free_page(kpage);
 
         for (size_t i = 0; i < pages_to_free; i++) {
           void* upage = free_start + i * PGSIZE;
@@ -109,12 +104,17 @@ static void* syscall_sbrk(intptr_t increment) {
             pagedir_clear_page(cur->pagedir, upage);
             palloc_free_page(kpage); // Free the physical page
           }
-          }
+        }
       }
     }
   }
 
-  cur->brk = new_brk;
+  if (new_brk < cur->start_heap) {
+    cur->brk = cur->start_heap;
+  } else {
+    cur->brk = new_brk;
+  }
+
   return old_brk;
 }
 
