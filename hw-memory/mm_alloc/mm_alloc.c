@@ -118,12 +118,29 @@ void* mm_malloc(size_t size) {
 }
 
 void* mm_realloc(void* ptr, size_t size) {
-  //TODO: Implement realloc
-  if (ptr != NULL || size > 0) {
+  if(ptr == NULL && size == 0){
     return NULL;
   }
 
-  return NULL;
+  if(ptr == NULL && size > 0){
+    return mm_malloc(size);
+  }
+
+  if(ptr != NULL && size == 0){
+    mm_free(ptr);
+    return NULL;
+  }
+
+  assert(ptr != NULL && size > 0);
+  void* new_mem_block = mm_malloc(size);
+  if(new_mem_block == NULL){
+    return NULL;
+  }
+
+  mm_md* old_block = (mm_md*)((char*)ptr - offsetof(mm_md, memory_block));
+  memcpy(new_mem_block, ptr, old_block->size);
+  mm_free(ptr);
+  return new_mem_block;
 }
 
 void mm_free(void* ptr) {
