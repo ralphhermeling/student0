@@ -138,38 +138,25 @@ void mm_free(void* ptr) {
   block->free = true;
 
   /* Coalesce consecutive blocks in both directions */
-  mm_md* curr = block;
-  while (curr != NULL) {
-    if (curr->next != NULL && curr->next->free) {
-      /* Coalesce */
-      mm_md* next = curr->next;
-      size_t added_space = sizeof(mm_md) + next->size;
-      
-      curr->next = next->next;
-      if(next->next){
-        next->next->prev = curr;
-      }
-
-      curr->size += added_space;
-    } else {
-      /* Only coalesce consecutive blocks, terminate early */
-      break;
+  while (block->next != NULL && block->next->free) {
+    /* Coalesce */
+    mm_md* next = block->next;
+    size_t added_space = sizeof(mm_md) + next->size;
+    block->size += added_space;
+    block->next = next->next;
+    if (next->next) {
+      next->next->prev = block;
     }
-    curr = curr->next;
   }
 
-  curr = block;
-  while(curr != NULL){
-    if(curr->prev != NULL && curr->prev->free){
-      mm_md* prev = curr->prev;
-      size_t added_space = sizeof(mm_md) + prev->size;
+  while (block->prev != NULL && block->prev->free) {
+    mm_md* prev = block->prev;
+    size_t added_space = sizeof(mm_md) + prev->size;
+    prev->size += added_space;
 
-      curr->prev = prev->prev;
-      if(prev->prev){
-        prev->prev->next = curr;
-      }
-
-      curr->size += added_space;
+    prev->next = block->next;
+    if(block->next){
+      block->next->prev = prev;
     }
   }
 
