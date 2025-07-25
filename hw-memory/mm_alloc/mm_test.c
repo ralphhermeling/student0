@@ -32,6 +32,119 @@ static void load_alloc_functions() {
   mm_free = try_dlsym(handle, "mm_free");
 }
 
+void test_simple_alloc_free() {
+  printf("Running simple malloc/free verification test...\n");
+  
+  // Test 1: Basic allocation and data writing
+  printf("  Testing basic allocation and data writing...\n");
+  int* int_ptr = (int*)mm_malloc(sizeof(int));
+  assert(int_ptr != NULL);
+  *int_ptr = 42;
+  assert(*int_ptr == 42);
+  mm_free(int_ptr);
+  
+  // Test 2: String allocation and manipulation
+  printf("  Testing string allocation and manipulation...\n");
+  char* str = (char*)mm_malloc(20);
+  assert(str != NULL);
+  strcpy(str, "Hello World!");
+  assert(strcmp(str, "Hello World!") == 0);
+  mm_free(str);
+  
+  // Test 3: Array allocation and memset
+  printf("  Testing array allocation with memset...\n");
+  unsigned char* array = (unsigned char*)mm_malloc(100);
+  assert(array != NULL);
+  
+  // Fill with pattern using memset
+  memset(array, 0xAB, 100);
+  for (int i = 0; i < 100; i++) {
+    assert(array[i] == 0xAB);
+  }
+  
+  // Change pattern
+  memset(array, 0x55, 50);
+  for (int i = 0; i < 50; i++) {
+    assert(array[i] == 0x55);
+  }
+  for (int i = 50; i < 100; i++) {
+    assert(array[i] == 0xAB);
+  }
+  
+  mm_free(array);
+  
+  // Test 4: Multiple allocations to verify free actually works
+  printf("  Testing that free actually releases memory...\n");
+  void* ptrs[10];
+  
+  // Allocate 10 blocks
+  for (int i = 0; i < 10; i++) {
+    ptrs[i] = mm_malloc(100);
+    assert(ptrs[i] != NULL);
+    // Write unique pattern to each block
+    memset(ptrs[i], i + 1, 100);
+  }
+  
+  // Verify patterns are intact
+  for (int i = 0; i < 10; i++) {
+    unsigned char* block = (unsigned char*)ptrs[i];
+    for (int j = 0; j < 100; j++) {
+      assert(block[j] == (unsigned char)(i + 1));
+    }
+  }
+  
+  // Free every other block
+  for (int i = 0; i < 10; i += 2) {
+    mm_free(ptrs[i]);
+  }
+  
+  // Verify remaining blocks still have correct data
+  for (int i = 1; i < 10; i += 2) {
+    unsigned char* block = (unsigned char*)ptrs[i];
+    for (int j = 0; j < 100; j++) {
+      assert(block[j] == (unsigned char)(i + 1));
+    }
+  }
+  
+  // Try to allocate new blocks (should reuse freed space if free works)
+  void* new_ptr1 = mm_malloc(50);
+  void* new_ptr2 = mm_malloc(50);
+  assert(new_ptr1 != NULL);
+  assert(new_ptr2 != NULL);
+  
+  // Test new allocations work
+  strcpy((char*)new_ptr1, "Reused1");
+  strcpy((char*)new_ptr2, "Reused2");
+  assert(strcmp((char*)new_ptr1, "Reused1") == 0);
+  assert(strcmp((char*)new_ptr2, "Reused2") == 0);
+  
+  // Clean up remaining blocks
+  for (int i = 1; i < 10; i += 2) {
+    mm_free(ptrs[i]);
+  }
+  mm_free(new_ptr1);
+  mm_free(new_ptr2);
+  
+  // Test 5: Large allocation with number patterns
+  printf("  Testing large allocation with number patterns...\n");
+  int* large_array = (int*)mm_malloc(sizeof(int) * 1000);
+  assert(large_array != NULL);
+  
+  // Fill with sequence
+  for (int i = 0; i < 1000; i++) {
+    large_array[i] = i * i;
+  }
+  
+  // Verify sequence
+  for (int i = 0; i < 1000; i++) {
+    assert(large_array[i] == i * i);
+  }
+  
+  mm_free(large_array);
+  
+  printf("Simple malloc/free verification test passed!\n");
+}
+
 void test_basic_malloc_free() {
   printf("Running basic malloc/free tests...\n");
   
@@ -301,6 +414,7 @@ void test_stress() {
 void print_usage(const char* program_name) {
   printf("Usage: %s [test_name]\n", program_name);
   printf("Available tests:\n");
+  printf("  simple_alloc_free  - Simple malloc/free verification\n");
   printf("  basic_malloc_free  - Basic malloc/free functionality\n");
   printf("  basic_realloc      - Basic realloc functionality\n");
   printf("  edge_cases         - Edge case testing\n");
@@ -322,7 +436,9 @@ int main(int argc, char* argv[]) {
   
   printf("Running memory allocator tests...\n\n");
   
-  if (strcmp(test_name, "basic_malloc_free") == 0) {
+  if (strcmp(test_name, "simple_alloc_free") == 0) {
+    test_simple_alloc_free();
+  } else if (strcmp(test_name, "basic_malloc_free") == 0) {
     test_basic_malloc_free();
   } else if (strcmp(test_name, "basic_realloc") == 0) {
     test_basic_realloc();
@@ -335,6 +451,7 @@ int main(int argc, char* argv[]) {
   } else if (strcmp(test_name, "stress") == 0) {
     test_stress();
   } else if (strcmp(test_name, "all") == 0) {
+    test_simple_alloc_free();
     test_basic_malloc_free();
     test_basic_realloc();
     test_edge_cases();
