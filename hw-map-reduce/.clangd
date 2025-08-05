@@ -1,0 +1,5 @@
+CompileFlags:
+  Add:
+    - -I/usr/include/tirpc
+    - -D_TIRPC_INCLUDES
+    - -I/usr/include/glib-2.0
