@@ -30,7 +30,7 @@ struct job_config_t {
 };
 typedef struct job_config_t job_config_t;
 
-typedef enum { COMPLETED, FAILED } job_status_t;
+typedef enum { COMPLETED, FAILED, IN_PROGRESS } job_status_t;
 
 typedef struct {
   job_id id;
@@ -52,7 +52,7 @@ typedef struct {
 } task_t;
 
 extern void init_job_and_task_management();
-extern job_id submit_job(job_config_t job_config);
+extern job_id submit_job(job_config_t* job_config);
 extern job_t* lookup_job(job_id id);
 
 extern void finish_task(job_id job_id, task_id task_id);

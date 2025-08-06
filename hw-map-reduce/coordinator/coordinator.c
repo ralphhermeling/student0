@@ -3,6 +3,7 @@
  */
 
 #include "coordinator.h"
+#include "job.h"
 
 #ifndef SIG_PF
 #define SIG_PF void (*)(int)
@@ -70,6 +71,17 @@ int* submit_job_1_svc(submit_job_request* argp, struct svc_req* rqstp) {
   if (stat(argp->output_dir, &st) == -1) {
     mkdirp(argp->output_dir);
   }
+
+  job_config_t job_config;
+  job_config.files.files_val = argp->files.files_val;
+  job_config.files.files_len = argp->files.files_len;
+  job_config.n_reduce = argp->n_reduce;
+  job_config.app = argp->app;
+  job_config.output_dir = argp->output_dir;
+  job_config.args.args_len = argp->args.args_len;
+  job_config.args.args_val = argp->args.args_val;
+
+  result = submit_job(&job_config);
 
   return &result;
   /* END */
