@@ -4,6 +4,9 @@
 
 #include "coordinator.h"
 #include "job.h"
+#include <assert.h>
+#include <cstring>
+#include <string.h>
 
 #ifndef SIG_PF
 #define SIG_PF void (*)(int)
@@ -121,13 +124,59 @@ get_task_reply* get_task_1_svc(void* argp, struct svc_req* rqstp) {
   static get_task_reply result;
 
   printf("Received get task request\n");
+
+  /* Free previous allocation if any */
+  if (result.args.args_len > 0 && result.args.args_val != NULL) {
+    free(result.args.args_val);
+    result.args.args_val = NULL;
+    result.args.args_len = 0;
+  }
+
   result.file = "";
   result.output_dir = "";
   result.app = "";
   result.wait = true;
-  result.args.args_len = 0;
 
-  /* TODO */
+  task_t* t = get_task();
+  if (t == NULL) {
+    printf("No task found\n");
+    result.wait = true;
+    return &result;
+  }
+  job_t* j = lookup_job(t->job_id);
+  assert(j != NULL);
+
+  /* Task specific config */
+  result.task = t->task_id;
+  result.file = t->file;
+  result.wait = false;
+  result.output_dir = t->output_dir;
+
+  /* Variable-length byte array - need to allocate */
+  result.args.args_len = t->args.args_len;
+  if (t->args.args_len > 0) {
+    result.args.args_val = malloc(t->args.args_len);
+    if (result.args.args_val == NULL) {
+      printf("Unable to allocate args_val for task\n");
+      result.file = "";
+      result.output_dir = "";
+      result.app = "";
+      result.wait = true;
+      return &result;
+    }
+    memcpy(result.args.args_val, t->args.args_val, t->args.args_len);
+  } else {
+    result.args.args_val = NULL;
+  }
+
+  /* Inherited from job */
+  result.app = t->app;
+  result.job_id = t->job_id;
+  result.n_reduce = j->config.n_reduce;
+  result.n_map = j->config.files.files_len;
+  result.reduce = (t->type == REDUCE);
+
+  printf("Found task and returning\n");
 
   return &result;
 }

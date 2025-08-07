@@ -6,6 +6,7 @@
 
 #include "job.h"
 #include "glib.h"
+#include <stdio.h>
 #include <sys/types.h>
 #include <stdlib.h>
 
@@ -48,6 +49,8 @@ static int schedule_map_tasks(job_t* job) {
     tasks[i]->file = job->config.files.files_val[i];
     tasks[i]->output_dir = job->config.output_dir;
     tasks[i]->task_id = i;
+    tasks[i]->args.args_len = job->config.args.args_len;
+    tasks[i]->args.args_val = job->config.args.args_val;
   }
 
   /** Add tasks to queue */
@@ -92,3 +95,22 @@ job_t* lookup_job(job_id id) {
   job_t* job = g_hash_table_lookup(ht, GINT_TO_POINTER(id));
   return job;
 };
+
+task_t* get_task() {
+  task_t* c = g_queue_pop_head(q);
+  if (c == NULL) {
+    return NULL;
+  }
+
+  while (c != NULL) {
+    job_t* j = lookup_job(c->job_id);
+    if (j == NULL || j->status == FAILED || j->status == COMPLETED) {
+      printf("Unable to get task's job or job status is failed or completed.\n");
+      free(c);
+      c = g_queue_pop_head(q);
+      continue;
+    }
+    return c;
+  }
+  return NULL;
+}
