@@ -9,6 +9,7 @@
 
 #include <sys/types.h>
 #include <stdbool.h>
+#include <time.h>
 
 typedef int job_id;
 typedef int task_id;
@@ -49,6 +50,7 @@ typedef struct {
   char* app;
   path file;
   path output_dir;
+  time_t start_time;
   struct {
     u_int args_len;
     char* args_val;
@@ -60,5 +62,6 @@ extern job_id submit_job(job_config_t* job_config);
 extern job_t* lookup_job(job_id id);
 extern void finish_task(job_id job_id, task_id task_id, task_type_t task_type, bool success);
 extern task_t* get_task();
+extern void reassign_timed_out_tasks(time_t timeout_threshold);
 
 #endif

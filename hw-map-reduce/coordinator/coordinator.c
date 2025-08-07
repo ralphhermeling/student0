@@ -94,6 +94,9 @@ poll_job_reply* poll_job_1_svc(int* argp, struct svc_req* rqstp) {
   static poll_job_reply result;
 
   printf("Received poll job request\n");
+
+  /* Opportunistically check for timed-out tasks */
+  reassign_timed_out_tasks(TASK_TIMEOUT_SECS);
   job_t* job = lookup_job(*argp);
   if (job == NULL) {
     printf("Job not found\n");
@@ -123,6 +126,9 @@ get_task_reply* get_task_1_svc(void* argp, struct svc_req* rqstp) {
   static get_task_reply result;
 
   printf("Received get task request\n");
+
+  /* Opportunistically check for timed-out tasks */
+  reassign_timed_out_tasks(TASK_TIMEOUT_SECS);
 
   /* Free previous allocation if any */
   if (result.args.args_len > 0 && result.args.args_val != NULL) {

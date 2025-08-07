@@ -9,21 +9,31 @@
 #include <stdio.h>
 #include <sys/types.h>
 #include <stdlib.h>
+#include <time.h>
 
 /** Supports monotonically increasing job IDs */
 static u_int next_job_id = 0;
 static GHashTable* ht;
 static GQueue* q;
+static GList* assigned_tasks;
 
 /** Smallest Job ID has the highest priority */
 static int compare_ints(gconstpointer a, gconstpointer b) {
   return GPOINTER_TO_INT(a) - GPOINTER_TO_INT(b);
 }
 
+/** Compare tasks by assignment time (max heap - longest assigned first) */
+static gint compare_assignment_time(gconstpointer a, gconstpointer b) {
+  task_t* task_a = (task_t*)a;
+  task_t* task_b = (task_t*)b;
+  return (gint)(task_b->start_time - task_a->start_time);
+}
+
 /** Initialize HashMap and MinHeap */
 void init_job_and_task_management() {
   ht = g_hash_table_new(g_direct_hash, g_direct_equal);
   q = g_queue_new();
+  assigned_tasks = NULL;
 };
 
 static int schedule_map_tasks(job_t* job) {
@@ -141,6 +151,11 @@ task_t* get_task() {
       c = g_queue_pop_head(q);
       continue;
     }
+    
+    // Set assignment time and add to assigned tasks list
+    c->start_time = time(NULL);
+    assigned_tasks = g_list_insert_sorted(assigned_tasks, c, compare_assignment_time);
+    
     return c;
   }
   return NULL;
@@ -150,6 +165,19 @@ void finish_task(job_id job_id, task_id task_id, task_type_t task_type, bool suc
   job_t* j = lookup_job(job_id);
   if (j == NULL) {
     return;
+  }
+
+  // Remove task from assigned_tasks list (both success and failure cases)
+  // and free it since we don't retry failed tasks
+  GList* link = assigned_tasks;
+  while (link != NULL) {
+    task_t* task = (task_t*)link->data;
+    if (task->job_id == job_id && task->task_id == task_id && task->type == task_type) {
+      assigned_tasks = g_list_delete_link(assigned_tasks, link);
+      free(task);
+      break;
+    }
+    link = link->next;
   }
 
   // Task has failed
@@ -173,5 +201,26 @@ void finish_task(job_id job_id, task_id task_id, task_type_t task_type, bool suc
   } else if (finished_map_tasks && finished_reduce_tasks) {
     printf("[job-%d]: Map and reduce tasks finished set job status to completed.\n", job_id);
     j->status = COMPLETED;
+  }
+}
+
+void reassign_timed_out_tasks(time_t timeout_threshold) {
+  time_t current_time = time(NULL);
+  GList* link = assigned_tasks;
+  
+  while (link != NULL) {
+    task_t* task = (task_t*)link->data;
+    GList* next_link = link->next;
+    
+    if (current_time - task->start_time > timeout_threshold) {
+      printf("Reassigning timed-out task: job-%d task-%d (assigned for %ld seconds)\n", 
+             task->job_id, task->task_id, current_time - task->start_time);
+      
+      // Move back to pending queue (don't free - will be reassigned)
+      g_queue_push_head(q, task);
+      assigned_tasks = g_list_delete_link(assigned_tasks, link);
+    }
+    
+    link = next_link;
   }
 }
