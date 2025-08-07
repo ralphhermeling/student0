@@ -29,7 +29,7 @@ void init_job_and_task_management() {
 static int schedule_map_tasks(job_t* job) {
   /** Initialize tasks */
   int n_map = job->config.files.files_len;
-  task_t** tasks = malloc(n_map * sizeof(task_t));
+  task_t** tasks = malloc(n_map * sizeof(task_t*));
   if (!tasks) {
     return -1;
   }
@@ -59,7 +59,38 @@ static int schedule_map_tasks(job_t* job) {
   }
 };
 
-static void schedule_reduce_tasks(job_t* job) { return; };
+static int schedule_reduce_tasks(job_t* job) {
+  /** Initialize tasks */
+  int n_reduce = job->config.n_reduce;
+  task_t** tasks = malloc(n_reduce * sizeof(task_t*));
+  if (!tasks) {
+    return -1;
+  }
+
+  for (int i = 0; i < n_reduce; i++) {
+    tasks[i] = malloc(sizeof(task_t));
+    if (!tasks[i]) {
+      for (size_t j = 0; j < i; j++) {
+        free(tasks[j]);
+      }
+      free(tasks);
+      return -1;
+    }
+    tasks[i]->job_id = job->id;
+    tasks[i]->app = job->config.app;
+    tasks[i]->type = REDUCE;
+    tasks[i]->file = "";
+    tasks[i]->output_dir = job->config.output_dir;
+    tasks[i]->task_id = i;
+    tasks[i]->args.args_len = job->config.args.args_len;
+    tasks[i]->args.args_val = job->config.args.args_val;
+  }
+
+  /** Add tasks to queue */
+  for (int i = 0; i < n_reduce; i++) {
+    g_queue_push_tail(q, tasks[i]);
+  }
+};
 
 job_id submit_job(job_config_t* job_config) {
   job_t* job = malloc(sizeof(job_t));
@@ -105,7 +136,7 @@ task_t* get_task() {
   while (c != NULL) {
     job_t* j = lookup_job(c->job_id);
     if (j == NULL || j->status == FAILED || j->status == COMPLETED) {
-      printf("Unable to get task's job or job status is failed or completed.\n");
+      printf("Unable to get task's job or job status:%d.\n", j != NULL ? j->status : -1);
       free(c);
       c = g_queue_pop_head(q);
       continue;
@@ -113,4 +144,34 @@ task_t* get_task() {
     return c;
   }
   return NULL;
+}
+
+void finish_task(job_id job_id, task_id task_id, task_type_t task_type, bool success) {
+  job_t* j = lookup_job(job_id);
+  if (j == NULL) {
+    return;
+  }
+
+  // Task has failed
+  if (!success) {
+    j->status = FAILED;
+    return;
+  }
+
+  printf("[job-%d]: task:%d of type: %s succeeded\n", job_id, task_id,
+         task_type == REDUCE ? "reduce" : "map");
+  task_type == REDUCE ? j->n_reduce_completed++ : j->n_map_completed++;
+  bool finished_map_tasks = j->n_map_completed == j->config.files.files_len;
+  bool finished_reduce_tasks = j->n_reduce_completed == j->config.n_reduce;
+  if (!finished_map_tasks) {
+    printf("[job-%d]: Map tasks not finished yet\n", job_id);
+    return;
+  } else if (finished_map_tasks && j->n_reduce_completed == 0) {
+    printf("[job-%d]: Map tasks finished and reduce not scheduled yet, let schedule.\n", job_id);
+    schedule_reduce_tasks(j);
+    return;
+  } else if (finished_map_tasks && finished_reduce_tasks) {
+    printf("[job-%d]: Map and reduce tasks finished set job status to completed.\n", job_id);
+    j->status = COMPLETED;
+  }
 }

@@ -5,7 +5,6 @@
 #include "coordinator.h"
 #include "job.h"
 #include <assert.h>
-#include <cstring>
 #include <string.h>
 
 #ifndef SIG_PF
@@ -109,7 +108,7 @@ poll_job_reply* poll_job_1_svc(int* argp, struct svc_req* rqstp) {
     result.done = true;
     result.failed = false;
   } else if (job->status == FAILED) {
-    result.done = false;
+    result.done = true;
     result.failed = true;
   } else {
     result.done = false;
@@ -149,6 +148,7 @@ get_task_reply* get_task_1_svc(void* argp, struct svc_req* rqstp) {
   /* Task specific config */
   result.task = t->task_id;
   result.file = t->file;
+  result.reduce = (t->type == REDUCE);
   result.wait = false;
   result.output_dir = t->output_dir;
 
@@ -174,7 +174,6 @@ get_task_reply* get_task_1_svc(void* argp, struct svc_req* rqstp) {
   result.job_id = t->job_id;
   result.n_reduce = j->config.n_reduce;
   result.n_map = j->config.files.files_len;
-  result.reduce = (t->type == REDUCE);
 
   printf("Found task and returning\n");
 
@@ -183,11 +182,11 @@ get_task_reply* get_task_1_svc(void* argp, struct svc_req* rqstp) {
 
 /* FINISH_TASK RPC implementation. */
 void* finish_task_1_svc(finish_task_request* argp, struct svc_req* rqstp) {
-  static char* result;
+  static char* result = NULL;
 
   printf("Received finish task request\n");
 
-  /* TODO */
+  finish_task(argp->job_id, argp->task, argp->reduce ? REDUCE : MAP, argp->success);
 
   return (void*)&result;
 }

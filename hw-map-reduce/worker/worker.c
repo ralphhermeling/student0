@@ -22,7 +22,7 @@ void run_worker(char* host) {
   while (true) {
     reply = get_task_1((void*)&get_task_1_arg, clnt);
     if (reply == (get_task_reply*)NULL) {
-      clnt_perror(clnt, "call failed");
+      clnt_perror(clnt, "call failed to get task");
       exit(1);
     }
 

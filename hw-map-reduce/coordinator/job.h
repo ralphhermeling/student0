@@ -58,7 +58,7 @@ typedef struct {
 extern void init_job_and_task_management();
 extern job_id submit_job(job_config_t* job_config);
 extern job_t* lookup_job(job_id id);
-extern void finish_task(job_id job_id, task_id task_id);
+extern void finish_task(job_id job_id, task_id task_id, task_type_t task_type, bool success);
 extern task_t* get_task();
 
 #endif

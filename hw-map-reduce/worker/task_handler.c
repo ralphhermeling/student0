@@ -193,7 +193,7 @@ int finish_task(CLIENT* clnt, get_task_reply* reply, bool success) {
   finish_task_1_arg.success = success;
   ft_reply = finish_task_1(&finish_task_1_arg, clnt);
   if (ft_reply == (void*)NULL) {
-    clnt_perror(clnt, "call failed");
+    clnt_perror(clnt, "call failed to finish task");
     return 1;
   }
   return 0;
