@@ -81,7 +81,7 @@ job_id submit_job(job_config_t* job_config) {
   memcpy(job->config.args.args_val, job_config->args.args_val, job_config->args.args_len);
 
   job->status = IN_PROGRESS;
-  g_hash_table_insert(ht, GPOINTER_TO_INT(job->id), job);
+  g_hash_table_insert(ht, GINT_TO_POINTER(job->id), job);
   if (schedule_map_tasks(job) == -1) {
     return -1;
   }

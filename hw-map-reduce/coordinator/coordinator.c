@@ -92,8 +92,26 @@ poll_job_reply* poll_job_1_svc(int* argp, struct svc_req* rqstp) {
   static poll_job_reply result;
 
   printf("Received poll job request\n");
+  job_t* job = lookup_job(*argp);
+  if (job == NULL) {
+    printf("Job not found\n");
+    result.invalid_job_id = true;
+    result.done = false;
+    result.failed = false;
+    return &result;
+  }
 
-  /* TODO */
+  result.invalid_job_id = false;
+  if (job->status == COMPLETED) {
+    result.done = true;
+    result.failed = false;
+  } else if (job->status == FAILED) {
+    result.done = false;
+    result.failed = true;
+  } else {
+    result.done = false;
+    result.failed = false;
+  }
 
   return &result;
 }
@@ -131,5 +149,6 @@ void coordinator_init(coordinator** coord_ptr) {
 
   coordinator* coord = *coord_ptr;
 
+  init_job_and_task_management();
   /* TODO */
 }
